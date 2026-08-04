@@ -1,0 +1,1202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gel Labeller</title>
+<style>
+  :root{
+    --ink:#12151a; --mat:#0c0e12; --panel:#1b2027; --line:#2c333d;
+    --text:#dfe4ea; --muted:#8e99a8; --accent:#ff9d3d; --accent-dim:#8a5320; --alert:#ff4d4d;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--ink);color:var(--text);font-family:var(--sans);
+       display:flex;flex-direction:column;overflow:hidden}
+
+  header{background:var(--panel);border-bottom:1px solid var(--line);padding:10px 14px 0;flex:0 0 auto}
+  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+         color:var(--accent);margin-right:6px;white-space:nowrap}
+  .brand span{color:var(--muted)}
+
+  button,select,label.file{font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;background:#232a33;color:var(--text);border:1px solid var(--line);
+    border-radius:3px;padding:7px 11px;cursor:pointer;line-height:1}
+  button:hover:not(:disabled),label.file:hover,select:hover{border-color:#4a5563;background:#2a323d}
+  button:disabled{opacity:.3;cursor:not-allowed}
+  button.primary{background:var(--accent-dim);border-color:#a8672a;color:#ffe6cc}
+  button.primary:hover:not(:disabled){background:#a3641f}
+  button.tgl.on{background:var(--accent-dim);border-color:#a8672a;color:#ffe6cc}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  input[type=file]{display:none}
+  .sep{width:1px;height:22px;background:var(--line);margin:0 3px}
+  .chk{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;
+       letter-spacing:.08em;text-transform:uppercase;color:var(--muted);cursor:pointer;user-select:none}
+  .chk input{accent-color:var(--accent);margin:0}
+
+  .comb{height:11px;margin-top:10px;display:flex;gap:5px;align-items:flex-start;overflow:hidden}
+  .comb i{flex:0 0 26px;height:7px;background:var(--line);border-radius:0 0 2px 2px}
+  .comb i.on{background:var(--accent);box-shadow:0 0 9px rgba(255,157,61,.5)}
+
+  main{flex:1 1 auto;overflow:auto;padding:22px;display:flex;justify-content:center;
+       align-items:flex-start;background:var(--mat)}
+  .wrap{display:flex;flex-direction:column;max-width:100%;min-width:0;
+        box-shadow:0 0 0 1px var(--line),0 18px 50px rgba(0,0,0,.6)}
+  .stage{position:relative;line-height:0;overflow:hidden}
+  .stage canvas{display:block;width:100%;height:auto}
+  .ovl{position:absolute;inset:0;line-height:normal;cursor:crosshair}
+
+  .lab{position:absolute;background:transparent;padding:0;margin:0;
+       outline:1px dashed transparent;outline-offset:3px;
+       white-space:pre;text-align:center;line-height:1.2;font-weight:400;
+       cursor:move;user-select:none;min-width:5px}
+  .lab:hover{outline-color:rgba(255,157,61,.55)}
+  .lab.sel{outline-color:var(--accent)}
+  .lab.edit{cursor:text;user-select:text}
+  .lab.empty::after{content:"label";opacity:.45;font-style:italic}
+  .band{position:absolute;border:1px solid var(--accent);background:rgba(255,157,61,.14);
+        pointer-events:none;z-index:4}
+
+  /* size + style controls, pinned under the image */
+  .tools{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+         background:var(--panel);border-top:1px solid var(--line);padding:8px 10px}
+  .tools.off .grp{opacity:.35;pointer-events:none}
+  .grp{display:flex;align-items:center;gap:6px}
+  .tools input[type=range]{width:150px;accent-color:var(--accent);margin:0}
+  .cap{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .pt{font-family:var(--mono);font-size:10px;color:var(--text);width:36px;text-align:right}
+  .sw{width:26px;height:24px;border-radius:3px;border:1px solid var(--line);background:#232a33;
+      cursor:pointer;padding:0;font-family:var(--mono);font-size:10px;color:var(--text);line-height:1}
+  .sw.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .sw.w{background:#fff;color:#000}
+  .sw.r{background:#ff2020;color:#fff}
+  .sw.del{color:var(--alert)}
+  .sw.ic{display:flex;align-items:center;justify-content:center}
+  .sw.ic svg{width:15px;height:15px}
+  .sw.ic rect{fill:currentColor;opacity:.8}
+  .sw.ic path{stroke:var(--accent);stroke-width:1.6;stroke-linecap:round;fill:none}
+  .grp.dim{opacity:.3;pointer-events:none}
+  .count{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+         text-transform:uppercase;color:var(--muted)}
+
+  .drop{margin:auto;text-align:center;padding:56px 40px;border:1px dashed var(--line);
+        border-radius:6px;max-width:520px;background:var(--panel)}
+  .drop h1{font-family:var(--mono);font-size:15px;letter-spacing:.16em;text-transform:uppercase;
+           margin:0 0 10px;color:var(--text)}
+  .drop p{color:var(--muted);font-size:13px;line-height:1.6;margin:0 0 18px}
+  .drop.hot{border-color:var(--accent);background:#232a33}
+
+  footer{flex:0 0 auto;background:var(--panel);border-top:1px solid var(--line);padding:7px 14px;
+         font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;
+         justify-content:space-between;gap:14px}
+  .keys span{color:var(--text)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <div class="brand">Gel&nbsp;Labeller <span>/ agarose</span></div>
+    <label class="file">Open image<input id="file" type="file" accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"></label>
+    <button id="detect" disabled>Find wells</button>
+    <select id="side" title="Where well labels are placed">
+      <option value="below">Labels below wells</option>
+      <option value="above">Labels above wells</option>
+    </select>
+    <select id="wellrot" title="Angle used for new well labels">
+      <option value="0">Well labels horizontal</option>
+      <option value="-90">Well labels vertical &uarr;</option>
+      <option value="90">Well labels vertical &darr;</option>
+    </select>
+    <div class="sep"></div>
+    <select id="font" title="Typeface used for labels">
+      <option value="Arial, Helvetica, sans-serif">Arial</option>
+      <option value="Helvetica, Arial, sans-serif">Helvetica</option>
+      <option value='"Times New Roman", Times, serif'>Times</option>
+      <option value='"Courier New", monospace'>Courier</option>
+    </select>
+    <label class="chk"><input type="checkbox" id="bold"> Bold</label>
+    <div class="sep"></div>
+    <button id="bw" class="tgl" disabled title="Convert the gel to greyscale">Black &amp; white</button>
+    <button id="inv" class="tgl" disabled title="Invert the gel">Invert</button>
+    <div class="sep"></div>
+    <select id="dpi" title="Resolution recorded in the saved PNG">
+      <option value="">Source DPI</option>
+      <option value="150">150 dpi</option>
+      <option value="300">300 dpi</option>
+      <option value="600">600 dpi</option>
+      <option value="1200">1200 dpi</option>
+    </select>
+    <label class="chk" title="Embed the source image and label positions so this PNG can be reopened and edited"><input type="checkbox" id="embed" checked> Re-editable</label>
+    <button id="clear" disabled>Clear labels</button>
+    <button id="save" class="primary" disabled>Save PNG</button>
+  </div>
+  <div class="comb" id="comb"></div>
+</header>
+
+<main id="main">
+  <div class="drop" id="drop">
+    <h1>Drop a gel image here</h1>
+    <p>PNG, JPEG, HEIC or HEIF. Wells are found automatically; click anywhere on the gel to add a label by hand. Reopen a re-editable PNG to pick up where you left off.</p>
+    <label class="file">Choose a file<input id="file2" type="file" accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"></label>
+  </div>
+
+  <div class="wrap" id="wrap" hidden>
+    <div class="stage" id="stage">
+      <canvas id="view"></canvas>
+      <div class="ovl" id="ovl"></div>
+    </div>
+    <div class="tools off" id="tools">
+      <div class="grp">
+        <span class="cap">Size</span>
+        <input type="range" id="size" min="6" max="200" step="1" value="18" title="Font size">
+        <span class="pt" id="pt">18px</span>
+        <label class="chk" title="Apply the size to every label"><input type="checkbox" id="all"> all</label>
+      </div>
+      <div class="sep"></div>
+      <div class="grp">
+        <span class="cap">Angle</span>
+        <button class="sw" id="r0" title="Horizontal">H</button>
+        <button class="sw" id="rup" title="Vertical, reading upwards">&uarr;</button>
+        <button class="sw" id="rdn" title="Vertical, reading downwards">&darr;</button>
+      </div>
+      <div class="sep"></div>
+      <div class="grp">
+        <span class="cap">Colour</span>
+        <button class="sw" id="cAuto" title="Pick from the background">A</button>
+        <button class="sw w" id="cWhite" title="White">W</button>
+        <button class="sw r" id="cRed" title="Red">R</button>
+      </div>
+      <div class="sep"></div>
+      <div class="grp" id="alignGrp">
+        <span class="cap">Align</span>
+        <button class="sw ic" id="alL" title="Align left edges"><svg viewBox="0 0 16 16"><path d="M2.5 2v12"/><rect x="4.5" y="4" width="9" height="3"/><rect x="4.5" y="9" width="6" height="3"/></svg></button>
+        <button class="sw ic" id="alC" title="Centre horizontally"><svg viewBox="0 0 16 16"><path d="M8 2v12"/><rect x="3.5" y="4" width="9" height="3"/><rect x="5" y="9" width="6" height="3"/></svg></button>
+        <button class="sw ic" id="alR" title="Align right edges"><svg viewBox="0 0 16 16"><path d="M13.5 2v12"/><rect x="2.5" y="4" width="9" height="3"/><rect x="5.5" y="9" width="6" height="3"/></svg></button>
+        <button class="sw ic" id="alT" title="Align top edges"><svg viewBox="0 0 16 16"><path d="M2 2.5h12"/><rect x="4" y="4.5" width="3" height="9"/><rect x="9" y="4.5" width="3" height="6"/></svg></button>
+        <button class="sw ic" id="alM" title="Centre vertically"><svg viewBox="0 0 16 16"><path d="M2 8h12"/><rect x="4" y="3.5" width="3" height="9"/><rect x="9" y="5" width="3" height="6"/></svg></button>
+        <button class="sw ic" id="alB" title="Align bottom edges"><svg viewBox="0 0 16 16"><path d="M2 13.5h12"/><rect x="4" y="2.5" width="3" height="9"/><rect x="9" y="5.5" width="3" height="6"/></svg></button>
+      </div>
+      <div class="sep"></div>
+      <div class="grp"><button class="sw del" id="del" title="Delete selected labels">&times;</button></div>
+      <div class="count" id="count">no labels selected</div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div id="status">No image loaded.</div>
+  <div id="fmt"></div>
+  <div class="keys"><span>drag on gel</span> select many &nbsp;·&nbsp; <span>alt-drag</span> duplicate &nbsp;·&nbsp; <span>arrows</span> nudge &nbsp;·&nbsp;
+    <span>Enter</span> deselect &nbsp;·&nbsp; <span>Shift+Enter</span> new line &nbsp;·&nbsp; <span>Del</span> remove</div>
+</footer>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const view=$('view'), ovl=$('ovl'), wrap=$('wrap'), drop=$('drop'), tools=$('tools'), status=$('status');
+const vctx = view.getContext('2d');
+
+const src  = document.createElement('canvas');                  // pristine original
+const sctx = src.getContext('2d');
+const proc = document.createElement('canvas');                  // after greyscale / invert
+const pctx = proc.getContext('2d',{willReadFrequently:true});
+
+let natW=0, natH=0, hasImage=false;
+let labels=[], sels=[], primary=null, editing=null, uid=0, lastWells=[];
+let bw=false, inv=false, srcFile=null, srcBuf=null, srcInfo=null, srcDpi=null;
+
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const median=a=>{const s=[...a].sort((x,y)=>x-y);return s.length?s[s.length>>1]:0};
+const setStatus=t=>status.textContent=t;
+const textOf=l=>(l.el.innerText||'').replace(/\u00a0/g,' ').replace(/\n+$/,'');
+
+/* ---------------------------------------------------------------- comb */
+function comb(n){
+  const c=$('comb'); c.innerHTML='';
+  const teeth=Math.max(14, Math.min(40, n||0));
+  for(let i=0;i<teeth;i++){const t=document.createElement('i'); if(n&&i<n)t.className='on'; c.appendChild(t);}
+}
+comb(0);
+
+
+/* ---------------------------------------------------- PNG side-car data
+   A saved figure has the labels burned into its pixels, so re-editing needs
+   two extra things travelling with it: the untouched source image, and the
+   label list. Both ride along in ancillary PNG chunks that every other
+   viewer ignores.                                                          */
+const SIG=[0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a];
+const KEY='gel-labeller';
+const isPng=u8 => u8.length>8 && SIG.every((b,i)=>u8[i]===b);
+
+const CRCT=(()=>{ const t=new Uint32Array(256);
+  for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[n]=c>>>0; }
+  return t; })();
+function crc32(b){
+  let c=0xFFFFFFFF;
+  for(let i=0;i<b.length;i++) c=CRCT[(c^b[i])&255]^(c>>>8);
+  return (c^0xFFFFFFFF)>>>0;
+}
+function* pngChunks(u8){
+  let p=8;
+  while(p+8<=u8.length){
+    const len=((u8[p]<<24)|(u8[p+1]<<16)|(u8[p+2]<<8)|u8[p+3])>>>0;
+    const type=String.fromCharCode(u8[p+4],u8[p+5],u8[p+6],u8[p+7]);
+    if(p+12+len>u8.length) return;
+    yield {type, data:u8.subarray(p+8,p+8+len), end:p+12+len};
+    if(type==='IEND') return;
+    p+=12+len;
+  }
+}
+function mkChunk(type, data){
+  const out=new Uint8Array(12+data.length);
+  const dv=new DataView(out.buffer);
+  dv.setUint32(0, data.length);
+  for(let i=0;i<4;i++) out[4+i]=type.charCodeAt(i);
+  out.set(data,8);
+  dv.setUint32(8+data.length, crc32(out.subarray(4,8+data.length)));
+  return out;
+}
+function mkITXt(keyword, text){
+  const kw=new TextEncoder().encode(keyword), tx=new TextEncoder().encode(text);
+  const out=new Uint8Array(kw.length+5+tx.length);
+  out.set(kw,0);
+  // null, compression flag 0, compression method 0, empty language, empty translated keyword
+  out.set([0,0,0,0,0], kw.length);
+  out.set(tx, kw.length+5);
+  return out;
+}
+function readITXt(d){
+  let i=d.indexOf(0); if(i<0) return null;
+  const keyword=new TextDecoder().decode(d.subarray(0,i));
+  const compressed=d[i+1];
+  let p=i+3;                                   // skip compression flag + method
+  p=d.indexOf(0,p)+1; if(p<1) return null;     // language tag
+  p=d.indexOf(0,p)+1; if(p<1) return null;     // translated keyword
+  if(compressed) return {keyword, text:null};
+  return {keyword, text:new TextDecoder().decode(d.subarray(p))};
+}
+function insertChunks(png, extra){
+  const u8=new Uint8Array(png);
+  let at=8;
+  for(const c of pngChunks(u8)){ if(c.type==='IHDR'){ at=c.end; break; } }
+  const add=extra.reduce((a,b)=>a+b.length,0);
+  const out=new Uint8Array(u8.length+add);
+  out.set(u8.subarray(0,at),0);
+  let p=at;
+  extra.forEach(c=>{ out.set(c,p); p+=c.length; });
+  out.set(u8.subarray(at),p);
+  return out;
+}
+function readSidecar(u8){
+  let meta=null, source=null;
+  if(!isPng(u8)) return {meta,source};
+  for(const c of pngChunks(u8)){
+    if(c.type==='iTXt'){
+      const kv=readITXt(c.data);
+      if(kv && kv.keyword===KEY && kv.text){ try{ meta=JSON.parse(kv.text); }catch(_){} }
+    } else if(c.type==='geLb') source=c.data.slice();
+  }
+  return {meta, source};
+}
+
+/* ---------------------------------------------- full-precision PNG path
+   canvas is 8-bit RGBA, so anything deeper than that is lost the moment an
+   image is drawn into one. For PNG sources we therefore decode, composite
+   and re-encode the samples ourselves, leaving bit depth and colour type
+   exactly as they came in.                                                */
+const CHAN={0:1,2:3,4:2,6:4};
+
+const zOK = typeof CompressionStream!=='undefined' && typeof DecompressionStream!=='undefined';
+async function zInflate(u8){
+  const s=new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate'));
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+async function zDeflate(u8){
+  const s=new Blob([u8]).stream().pipeThrough(new CompressionStream('deflate'));
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+
+function pngInfo(u8){
+  if(!isPng(u8)) return null;
+  for(const c of pngChunks(u8)){
+    if(c.type!=='IHDR') continue;
+    const d=new DataView(c.data.buffer, c.data.byteOffset, c.data.length);
+    return {w:d.getUint32(0), h:d.getUint32(4), depth:c.data[8], ctype:c.data[9],
+            interlace:c.data[12], ch:CHAN[c.data[9]]||0};
+  }
+  return null;
+}
+
+/* only the shapes a gel scan actually comes in — anything else falls back */
+function nativeReady(info){
+  return !!(zOK && info && !info.interlace && (info.depth===8||info.depth===16)
+            && (info.ctype===0||info.ctype===2));
+}
+
+function unfilter(raw, h, stride, bpp){
+  const out=new Uint8Array(h*stride);
+  let p=0;
+  for(let y=0;y<h;y++){
+    const ft=raw[p++], o=y*stride, po=o-stride;
+    for(let x=0;x<stride;x++){
+      const v=raw[p+x];
+      const a=x>=bpp?out[o+x-bpp]:0;
+      const b=y?out[po+x]:0;
+      const c=(y&&x>=bpp)?out[po+x-bpp]:0;
+      let add;
+      switch(ft){
+        case 0: add=0; break;
+        case 1: add=a; break;
+        case 2: add=b; break;
+        case 3: add=(a+b)>>1; break;
+        case 4: { const q=a+b-c, pa=Math.abs(q-a), pb=Math.abs(q-b), pc=Math.abs(q-c);
+                  add=(pa<=pb&&pa<=pc)?a:(pb<=pc?b:c); break; }
+        default: add=0;
+      }
+      out[o+x]=(v+add)&255;
+    }
+    p+=stride;
+  }
+  return out;
+}
+
+async function decodePng(u8){
+  const info=pngInfo(u8);
+  if(!nativeReady(info)) return null;
+  const parts=[]; let total=0;
+  const carry=[];
+  for(const c of pngChunks(u8)){
+    if(c.type==='IDAT'){ parts.push(c.data); total+=c.data.length; }
+    else if(/^(pHYs|sRGB|gAMA|cHRM|iCCP)$/.test(c.type)) carry.push({type:c.type, data:c.data.slice()});
+  }
+  const z=new Uint8Array(total);
+  let p=0; parts.forEach(d=>{ z.set(d,p); p+=d.length; });
+  const stride=info.w*info.ch*info.depth/8;
+  const bpp=Math.max(1, info.ch*info.depth/8);
+  const flat=unfilter(await zInflate(z), info.h, stride, bpp);
+  let data;
+  if(info.depth===8) data=flat;
+  else{ data=new Uint16Array(flat.length>>1);
+        for(let i=0,j=0;j<data.length;j++,i+=2) data[j]=(flat[i]<<8)|flat[i+1]; }
+  return {...info, data, carry};
+}
+
+async function encodePng(data, w, h, depth, ctype, extra){
+  const ch=CHAN[ctype], stride=w*ch*depth/8, bpp=Math.max(1, ch*depth/8);
+  let bytes;
+  if(depth===8) bytes=data instanceof Uint8Array?data:Uint8Array.from(data);
+  else{ bytes=new Uint8Array(data.length*2);
+        for(let i=0,j=0;j<data.length;j++,i+=2){ bytes[i]=data[j]>>>8; bytes[i+1]=data[j]&255; } }
+
+  const raw=new Uint8Array(h*(stride+1));
+  for(let y=0;y<h;y++){
+    const o=y*(stride+1), s=y*stride, ps=s-stride;
+    raw[o]=4;                                        // Paeth suits photographic gels
+    for(let x=0;x<stride;x++){
+      const a=x>=bpp?bytes[s+x-bpp]:0;
+      const b=y?bytes[ps+x]:0;
+      const c=(y&&x>=bpp)?bytes[ps+x-bpp]:0;
+      const q=a+b-c, pa=Math.abs(q-a), pb=Math.abs(q-b), pc=Math.abs(q-c);
+      const pred=(pa<=pb&&pa<=pc)?a:(pb<=pc?b:c);
+      raw[o+1+x]=(bytes[s+x]-pred)&255;
+    }
+  }
+  const ihdr=new Uint8Array(13), dv=new DataView(ihdr.buffer);
+  dv.setUint32(0,w); dv.setUint32(4,h);
+  ihdr[8]=depth; ihdr[9]=ctype;
+  const chunks=[mkChunk('IHDR',ihdr), ...(extra||[]), mkChunk('IDAT', await zDeflate(raw)),
+                mkChunk('IEND', new Uint8Array(0))];
+  const len=8+chunks.reduce((a,c)=>a+c.length,0);
+  const out=new Uint8Array(len);
+  out.set(SIG,0); let p=8;
+  chunks.forEach(c=>{ out.set(c,p); p+=c.length; });
+  return out;
+}
+
+/* ------------------------------------------------------------ density */
+function readPhys(chunkData){
+  const d=new DataView(chunkData.buffer, chunkData.byteOffset, chunkData.length);
+  if(chunkData[8]!==1) return null;                  // unit must be the metre
+  return {x:Math.round(d.getUint32(0)*0.0254), y:Math.round(d.getUint32(4)*0.0254)};
+}
+function makePhys(dpiX, dpiY){
+  const d=new Uint8Array(9), dv=new DataView(d.buffer);
+  dv.setUint32(0, Math.round(dpiX/0.0254));
+  dv.setUint32(4, Math.round(dpiY/0.0254));
+  d[8]=1;
+  return mkChunk('pHYs', d);
+}
+function jpegDpi(u8){
+  if(u8[0]!==0xFF||u8[1]!==0xD8) return null;
+  let p=2;
+  while(p+4<u8.length && u8[p]===0xFF){
+    const m=u8[p+1], len=(u8[p+2]<<8)|u8[p+3];
+    if(m===0xD8||m===0xD9||m===0xDA) break;
+    if(m===0xE0 && u8[p+4]===0x4A && u8[p+5]===0x46 && u8[p+6]===0x49 && u8[p+7]===0x46){
+      const unit=u8[p+11], x=(u8[p+12]<<8)|u8[p+13], y=(u8[p+14]<<8)|u8[p+15];
+      if(!x||!y) return null;
+      if(unit===1) return {x,y};
+      if(unit===2) return {x:Math.round(x*2.54), y:Math.round(y*2.54)};
+      return null;
+    }
+    p+=2+len;
+  }
+  return null;
+}
+function sourceDpi(u8){
+  if(isPng(u8)){
+    for(const c of pngChunks(u8)) if(c.type==='pHYs') return readPhys(c.data);
+    return null;
+  }
+  return jpegDpi(u8);
+}
+
+/* ------------------------------------------------------------ loading */
+async function decode(file, name){
+  const heic = /hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(name||file.name||'');
+  if(!heic) return createImageBitmap(file,{imageOrientation:'from-image',colorSpaceConversion:'none'});
+  try{ return await createImageBitmap(file,{imageOrientation:'from-image',colorSpaceConversion:'none'}); }   // Safari decodes HEIC itself
+  catch(_){
+    setStatus('Converting HEIC…');
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js');
+    if(!window.heic2any) throw new Error('HEIC needs an internet connection here, or open the file in Safari.');
+    const out = await window.heic2any({blob:file, toType:'image/png'});
+    return createImageBitmap(Array.isArray(out)?out[0]:out,{imageOrientation:'from-image'});
+  }
+}
+function loadScript(url){
+  return new Promise((res,rej)=>{
+    if(document.querySelector(`script[src="${url}"]`)) return res();
+    const s=document.createElement('script'); s.src=url; s.onload=res; s.onerror=()=>rej(new Error('load failed'));
+    document.head.appendChild(s);
+  });
+}
+
+async function openFile(file){
+  if(!file) return;
+  setStatus('Reading '+file.name+'…');
+
+  // a previously saved figure carries its own source image and label list
+  let meta=null, srcBytes=null, rawBuf=null;
+  try{
+    rawBuf=new Uint8Array(await file.arrayBuffer());
+    ({meta, source:srcBytes} = readSidecar(rawBuf));
+  }catch(_){}
+
+  const from = srcBytes ? new Blob([srcBytes], {type:(meta&&meta.srcType)||'image/png'}) : file;
+  let bmp;
+  try{ bmp = await decode(from, (meta&&meta.srcName)||file.name); }
+  catch(e){ setStatus(e.message||'That file could not be read. Try PNG or JPEG.'); return; }
+
+  natW=bmp.width; natH=bmp.height;
+  src.width=natW;  src.height=natH;  sctx.drawImage(bmp,0,0);
+  proc.width=natW; proc.height=natH;
+  view.width=natW; view.height=natH;
+  bmp.close && bmp.close();
+
+  labels.forEach(l=>l.el.remove());
+  labels=[]; sels=[]; primary=null; editing=null; lastWells=[];
+  hasImage=true; drop.hidden=true; wrap.hidden=false;
+  wrap.style.width=natW+'px';
+  ['detect','save','clear','bw','inv'].forEach(id=>$(id).disabled=false);
+  srcFile = srcBytes ? new Blob([srcBytes],{type:(meta&&meta.srcType)||'image/png'}) : file;
+  srcBuf  = srcBytes || rawBuf;
+  srcInfo = srcBuf ? pngInfo(srcBuf) : null;
+  srcDpi  = srcBuf ? sourceDpi(srcBuf) : null;
+  showFormat();
+
+  const editable = meta && srcBytes;
+  if(editable) applySettings(meta);
+  applyFx();
+  rescale();
+
+  if(editable) restoreLabels(meta);
+  else{
+    if(meta) setStatus('This PNG has label positions but no embedded source, so the labels are already part of the picture.');
+    findWells();
+  }
+}
+
+function applySettings(m){
+  bw  = !!(m.fx && m.fx.bw);  $('bw').classList.toggle('on',bw);
+  inv = !!(m.fx && m.fx.inv); $('inv').classList.toggle('on',inv);
+  if(m.font) $('font').value=m.font;
+  $('bold').checked=!!m.bold;
+  if(m.side)    $('side').value=m.side;
+  if(m.wellrot!==undefined) $('wellrot').value=String(m.wellrot);
+  if(m.dpi!==undefined) $('dpi').value=m.dpi;
+}
+
+function restoreLabels(m){
+  lastWells = m.wells || [];
+  (m.labels||[]).forEach(o=>{
+    const l=make(o.cx, o.y, o.size, o.wi, o.rot, o.anchor);
+    l.colour=o.colour||'auto';
+    if(o.t) l.el.innerText=o.t;
+    l.el.classList.toggle('empty', !l.el.innerText.trim());
+    place(l); paint(l);
+  });
+  comb(labels.filter(l=>l.wi!==undefined).length);
+  const n=labels.length;
+  setStatus(`Reopened with ${n} label${n===1?'':'s'} — edit and save again.`);
+}
+$('file').onchange  = e => openFile(e.target.files[0]);
+$('file2').onchange = e => openFile(e.target.files[0]);
+['dragenter','dragover'].forEach(t=>document.addEventListener(t,e=>{e.preventDefault();drop.classList.add('hot')}));
+['dragleave','drop'].forEach(t=>document.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('hot')}));
+document.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) openFile(f); });
+
+/* -------------------------------------------- greyscale / invert */
+function applyFx(){
+  if(!hasImage) return;
+  pctx.drawImage(src,0,0);
+  if(bw||inv){
+    const img=pctx.getImageData(0,0,natW,natH), a=img.data;
+    for(let i=0;i<a.length;i+=4){
+      if(bw){ const g=(0.299*a[i]+0.587*a[i+1]+0.114*a[i+2])|0; a[i]=a[i+1]=a[i+2]=g; }
+      if(inv){ a[i]=255-a[i]; a[i+1]=255-a[i+1]; a[i+2]=255-a[i+2]; }
+    }
+    pctx.putImageData(img,0,0);
+  }
+  vctx.clearRect(0,0,natW,natH);
+  vctx.drawImage(proc,0,0);
+  labels.forEach(paint);                       // an inverted gel flips the automatic colours
+}
+$('bw').onclick  = ()=>{ bw=!bw;  $('bw').classList.toggle('on',bw);   applyFx(); };
+$('inv').onclick = ()=>{ inv=!inv; $('inv').classList.toggle('on',inv); applyFx(); };
+
+/* -------------------------------------------------------------- scale */
+function rescale(){
+  if(!hasImage) return;
+  wrap.style.setProperty('--sc', (view.clientWidth/natW) || 1);
+  labels.forEach(place);
+}
+new ResizeObserver(rescale).observe(view);
+
+/* ------------------------------------------------------------- labels */
+/* A label is anchored at (cx, y). For rot 0 that point is the top centre of
+   the text block; rotated, it stays the top centre of the rotated box, so a
+   label keeps touching its well no matter how long the text gets.
+   anchor:'bottom' flips it to the bottom edge, used above the wells.        */
+function offsets(l, W, H){
+  if(l.rot===0)   return [-W/2, l.anchor==='bottom' ? -H : 0];
+  if(l.rot===-90) return [-H/2, l.anchor==='bottom' ?  0 : W];
+  return             [ H/2, l.anchor==='bottom' ? -W : 0];
+}
+
+function make(cx, y, size, wi, rot, anchor){
+  const el=document.createElement('div');
+  el.className='lab empty';
+  el.spellcheck=false;
+  const l={id:++uid, cx, y, size, colour:'auto', rot:rot||0, anchor:anchor||'top', el, wi};
+  ovl.appendChild(el);
+  labels.push(l);
+  place(l); paint(l);
+
+  el.addEventListener('pointerdown', ev=>{
+    if(editing===l) return;                                     // let the caret be placed
+    ev.preventDefault(); ev.stopPropagation();
+    if(ev.shiftKey){ toggle(l); return; }
+    if(!sels.includes(l)) select([l]);
+
+    const r=view.getBoundingClientRect(), k=natW/r.width;
+    const x0=ev.clientX, y0=ev.clientY, alt=ev.altKey;
+    let start=sels.map(s=>({s, cx:s.cx, y:s.y}));
+    let moved=false;
+    const mv=e=>{
+      const dx=e.clientX-x0, dy=e.clientY-y0;
+      if(!moved && Math.hypot(dx,dy)>4){
+        moved=true;
+        if(alt){                        // option-drag leaves the originals behind
+          const copies=sels.map(dup);
+          select(copies, true);
+          start=copies.map(s=>({s, cx:s.cx, y:s.y}));
+          setStatus(`${copies.length} label${copies.length===1?'':'s'} duplicated.`);
+        }
+      }
+      if(!moved) return;
+      start.forEach(o=>{
+        o.s.cx=clamp(o.cx+dx*k,0,natW);
+        o.s.y =clamp(o.y +dy*k,0,natH);
+        place(o.s);
+      });
+    };
+    const up=()=>{
+      window.removeEventListener('pointermove',mv); window.removeEventListener('pointerup',up);
+      if(moved) sels.forEach(paint); else edit(l);
+    };
+    window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up);
+  });
+
+  el.addEventListener('keydown', ev=>{
+    if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); stopEdit(); deselect(); }
+    else if(ev.key==='Escape'){ ev.preventDefault(); stopEdit(); deselect(); }
+  });
+  el.addEventListener('input', ()=>{
+    el.classList.toggle('empty', !el.innerText.trim());
+    place(l);                                                   // rotated text grows sideways
+  });
+  el.addEventListener('paste', ev=>{
+    ev.preventDefault();
+    const t=(ev.clipboardData||window.clipboardData).getData('text');
+    document.execCommand('insertText', false, t);
+  });
+  return l;
+}
+
+function place(l){
+  const el=l.el;
+  el.style.fontSize=`calc(var(--sc) * ${l.size}px)`;
+  el.style.left=(l.cx/natW*100)+'%';
+  el.style.top =(l.y /natH*100)+'%';
+  el.style.transformOrigin='0 0';
+  const [tx,ty]=offsets(l, el.offsetWidth, el.offsetHeight);
+  el.style.transform=`translate(${tx}px, ${ty}px) rotate(${l.rot}deg)`;
+}
+function paint(l){
+  l.el.style.color=colourOf(l);
+  l.el.style.fontFamily=$('font').value;
+  l.el.style.fontWeight=$('bold').checked?'700':'400';
+}
+function repaintAll(){ labels.forEach(l=>{ place(l); paint(l); }); }
+$('font').onchange = repaintAll;
+$('bold').onchange = repaintAll;
+
+/* white on a dark gel, red on a light one — sampled under the label itself */
+function colourOf(l){
+  if(l.colour==='white') return '#ffffff';
+  if(l.colour==='red')   return '#ff2020';
+  return luminance(l) < 118 ? '#ffffff' : '#ff2020';
+}
+function luminance(l){
+  let x0,y0,w,h;
+  const r=l.el.getBoundingClientRect(), o=ovl.getBoundingClientRect();
+  if(o.width>0 && r.width>1){
+    const k=natW/o.width;
+    x0=(r.left-o.left)*k; y0=(r.top-o.top)*k; w=r.width*k; h=r.height*k;
+  }else{ w=l.size*4; h=l.size*1.4; x0=l.cx-w/2; y0=l.y; }
+  x0=clamp(Math.round(x0),0,Math.max(0,natW-1));
+  y0=clamp(Math.round(y0),0,Math.max(0,natH-1));
+  w=Math.max(1,Math.min(Math.round(w),natW-x0));
+  h=Math.max(1,Math.min(Math.round(h),natH-y0));
+  const d=pctx.getImageData(x0,y0,w,h).data;
+  const step=Math.max(1,Math.floor(Math.sqrt(w*h/4000)))*4;     // sample, don't crawl
+  let sum=0,n=0;
+  for(let i=0;i<d.length;i+=step){ sum+=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; n++; }
+  return n?sum/n:0;
+}
+
+/* a duplicate is no longer tied to a well, so it gets no well index */
+function dup(l){
+  const c=make(l.cx, l.y, l.size, undefined, l.rot, l.anchor);
+  c.colour=l.colour;
+  c.el.innerHTML=l.el.innerHTML;                   // keeps any line breaks
+  c.el.classList.toggle('empty', !c.el.innerText.trim());
+  place(c); paint(c);
+  return c;
+}
+
+/* the drawn box of a label, in image pixels — covers rotation and line count */
+function boxOf(l){
+  const r=l.el.getBoundingClientRect(), o=ovl.getBoundingClientRect();
+  const k=natW/o.width;
+  return {x0:(r.left-o.left)*k, y0:(r.top-o.top)*k, x1:(r.right-o.left)*k, y1:(r.bottom-o.top)*k};
+}
+
+/* Alignment shifts the anchor by the same delta as the box, so it works the
+   same for horizontal, rotated, top- and bottom-anchored labels alike.       */
+function align(mode){
+  if(sels.length<2) return;
+  const set=sels.map(l=>({l, b:boxOf(l)}));
+  const x0=Math.min(...set.map(o=>o.b.x0)), x1=Math.max(...set.map(o=>o.b.x1));
+  const y0=Math.min(...set.map(o=>o.b.y0)), y1=Math.max(...set.map(o=>o.b.y1));
+  set.forEach(o=>{
+    let dx=0, dy=0;
+    if(mode==='left')        dx = x0 - o.b.x0;
+    else if(mode==='right')  dx = x1 - o.b.x1;
+    else if(mode==='centre') dx = (x0+x1)/2 - (o.b.x0+o.b.x1)/2;
+    else if(mode==='top')    dy = y0 - o.b.y0;
+    else if(mode==='bottom') dy = y1 - o.b.y1;
+    else if(mode==='middle') dy = (y0+y1)/2 - (o.b.y0+o.b.y1)/2;
+    o.l.cx+=dx; o.l.y+=dy;
+    place(o.l); paint(o.l);
+  });
+  setStatus(`${sels.length} labels aligned ${mode==='centre'?'to centre':mode==='middle'?'to middle':mode}.`);
+}
+
+/* ---------------------------------------------------------- selection */
+function select(list, keepBlanks){
+  const gone=sels.filter(l=>!list.includes(l));
+  sels=[...list];
+  primary=sels[sels.length-1]||null;
+  labels.forEach(l=>l.el.classList.toggle('sel', sels.includes(l)));
+  if(!keepBlanks) gone.forEach(cleanup);      // duplicating must not sweep the original away
+  syncTools();
+}
+function toggle(l){
+  select(sels.includes(l) ? sels.filter(x=>x!==l) : [...sels, l]);
+}
+function deselect(){ select([]); }
+function cleanup(l){        // a blank hand-placed label removes itself; well labels stay put
+  if(l.wi===undefined && !textOf(l).trim()) remove(l);
+}
+function edit(l){
+  select([l]);
+  editing=l;
+  l.el.contentEditable='true';
+  l.el.classList.add('edit');
+  l.el.focus();
+  const r=document.createRange(); r.selectNodeContents(l.el); r.collapse(false);
+  const s=getSelection(); s.removeAllRanges(); s.addRange(r);
+  l.el.onblur=()=>{ if(editing===l) stopEdit(); };
+}
+function stopEdit(){
+  if(!editing) return;
+  const l=editing; editing=null;
+  l.el.contentEditable='false';
+  l.el.classList.remove('edit');
+  l.el.blur();
+  place(l); paint(l);
+}
+function remove(l){
+  l.el.remove();
+  labels=labels.filter(x=>x!==l);
+  sels=sels.filter(x=>x!==l);
+  if(primary===l) primary=sels[sels.length-1]||null;
+  if(editing===l) editing=null;
+  syncTools();
+}
+
+function syncTools(){
+  const n=sels.length;
+  tools.classList.toggle('off', n===0);
+  $('count').textContent = n===0 ? 'no labels selected'
+                         : n===1 ? '1 label selected' : n+' labels selected';
+  $('alignGrp').classList.toggle('dim', n<2);
+  if(!primary) return;
+  const s=$('size');
+  s.max=Math.max(60, Math.round(natH*0.14));
+  s.value=primary.size; $('pt').textContent=primary.size+'px';
+  $('r0').classList.toggle('on',  primary.rot===0);
+  $('rup').classList.toggle('on', primary.rot===-90);
+  $('rdn').classList.toggle('on', primary.rot===90);
+  $('cAuto').classList.toggle('on',  primary.colour==='auto');
+  $('cWhite').classList.toggle('on', primary.colour==='white');
+  $('cRed').classList.toggle('on',   primary.colour==='red');
+}
+
+/* click bare gel to add a label; drag across it to select several */
+ovl.addEventListener('pointerdown', ev=>{
+  if(ev.target!==ovl) return;
+  const r=view.getBoundingClientRect(), k=natW/r.width;
+  const sx=ev.clientX, sy=ev.clientY, add=ev.shiftKey;
+  let band=null;
+  const mv=e=>{
+    if(!band && Math.hypot(e.clientX-sx,e.clientY-sy)>4){
+      band=document.createElement('div'); band.className='band'; ovl.appendChild(band);
+      stopEdit();
+    }
+    if(!band) return;
+    band.style.left  =(Math.min(sx,e.clientX)-r.left)+'px';
+    band.style.top   =(Math.min(sy,e.clientY)-r.top )+'px';
+    band.style.width =Math.abs(e.clientX-sx)+'px';
+    band.style.height=Math.abs(e.clientY-sy)+'px';
+  };
+  const up=e=>{
+    window.removeEventListener('pointermove',mv); window.removeEventListener('pointerup',up);
+    if(band){
+      const x0=Math.min(sx,e.clientX), x1=Math.max(sx,e.clientX);
+      const y0=Math.min(sy,e.clientY), y1=Math.max(sy,e.clientY);
+      band.remove();
+      const hit=labels.filter(l=>{
+        const b=l.el.getBoundingClientRect();
+        return b.right>=x0 && b.left<=x1 && b.bottom>=y0 && b.top<=y1;
+      });
+      select(add ? [...sels, ...hit.filter(l=>!sels.includes(l))] : hit);
+      if(hit.length) setStatus(`${hit.length} label${hit.length===1?'':'s'} selected — nudge with the arrow keys.`);
+      return;
+    }
+    if(sels.length){ stopEdit(); deselect(); return; }
+    const size=clamp(Math.round(natH/28),10,200);
+    const l=make((sx-r.left)*k, (sy-r.top)*k - size*0.6, size);
+    edit(l);
+  };
+  window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up);
+});
+
+/* -------------------------------------------------------- keyboard */
+document.addEventListener('keydown', ev=>{
+  if(editing) return;
+  const t=document.activeElement;
+  if(t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) return;
+
+  if((ev.ctrlKey||ev.metaKey) && ev.key.toLowerCase()==='a' && hasImage && labels.length){
+    ev.preventDefault(); select([...labels]); return;
+  }
+  if(!sels.length) return;
+
+  const base=Math.max(1, Math.round(natW/900));
+  const step=ev.shiftKey ? base*8 : base;
+  let dx=0, dy=0;
+  if(ev.key==='ArrowLeft')  dx=-step;
+  else if(ev.key==='ArrowRight') dx=step;
+  else if(ev.key==='ArrowUp')    dy=-step;
+  else if(ev.key==='ArrowDown')  dy=step;
+  if(dx||dy){
+    ev.preventDefault();
+    sels.forEach(l=>{ l.cx=clamp(l.cx+dx,0,natW); l.y=clamp(l.y+dy,0,natH); place(l); paint(l); });
+    return;
+  }
+  if(ev.key==='Delete'||ev.key==='Backspace'){ ev.preventDefault(); sels.slice().forEach(remove); }
+  else if(ev.key==='Escape') deselect();
+  else if(ev.key==='Enter' && sels.length===1){ ev.preventDefault(); edit(sels[0]); }
+});
+
+/* -------------------------------------------------------- bottom bar */
+$('size').addEventListener('input', e=>{
+  const v=+e.target.value; $('pt').textContent=v+'px';
+  const target=$('all').checked ? labels : sels;
+  target.forEach(l=>{ l.size=v; place(l); paint(l); });
+});
+function setRot(rot){
+  if(!sels.length) return;
+  sels.forEach(l=>{ l.rot=rot; place(l); paint(l); });
+  syncTools();
+}
+$('r0').onclick =()=>setRot(0);
+$('rup').onclick=()=>setRot(-90);
+$('rdn').onclick=()=>setRot(90);
+
+function setColour(mode){
+  if(!sels.length) return;
+  sels.forEach(l=>{ l.colour=mode; paint(l); });
+  syncTools();
+}
+$('cAuto').onclick =()=>setColour('auto');
+$('cWhite').onclick=()=>setColour('white');
+$('cRed').onclick  =()=>setColour('red');
+$('alL').onclick=()=>align('left');
+$('alC').onclick=()=>align('centre');
+$('alR').onclick=()=>align('right');
+$('alT').onclick=()=>align('top');
+$('alM').onclick=()=>align('middle');
+$('alB').onclick=()=>align('bottom');
+$('del').onclick   =()=>sels.slice().forEach(remove);
+$('clear').onclick =()=>{
+  labels.slice().forEach(remove); deselect(); lastWells=[]; comb(0); setStatus('Labels cleared.');
+};
+
+/* ------------------------------------------------------- well finding */
+$('detect').onclick=findWells;
+
+function wellPos(v){
+  const gap=Math.max(3, v.h*0.45);
+  return $('side').value==='below' ? v.bot+gap : Math.max(0, v.top-gap);
+}
+const wellAnchor = ()=> $('side').value==='below' ? 'top' : 'bottom';
+
+function reflowWells(){
+  if(!lastWells.length) return;
+  const rot=+$('wellrot').value, anc=wellAnchor();
+  labels.forEach(l=>{
+    const v=lastWells[l.wi];
+    if(l.wi===undefined || !v) return;
+    l.rot=rot; l.anchor=anc; l.y=wellPos(v);
+    place(l); paint(l);
+  });
+  syncTools();
+}
+$('side').onchange=reflowWells;              // keep whatever has been typed in
+$('wellrot').onchange=reflowWells;
+
+function findWells(){
+  if(!hasImage) return;
+  const MAX=700;
+  const s=Math.min(1, MAX/Math.max(natW,natH));
+  const w=Math.max(8,Math.round(natW*s)), h=Math.max(8,Math.round(natH*s));
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const cx=c.getContext('2d',{willReadFrequently:true});
+  cx.drawImage(proc,0,0,w,h);
+  const d=cx.getImageData(0,0,w,h).data;
+  const g=new Uint8Array(w*h);
+  for(let i=0,p=0;i<g.length;i++,p+=4) g[i]=(0.299*d[p]+0.587*d[p+1]+0.114*d[p+2])|0;
+
+  const band=Math.max(6, Math.round(h*0.55));       // wells sit in the upper part of a gel
+  const hist=new Float64Array(256);
+  for(let y=0;y<band;y++) for(let x=0;x<w;x++) hist[g[y*w+x]]++;
+
+  // one threshold rarely suits every gel, so sweep a spread of them and keep the best row
+  const cand=new Set([otsu(hist, w*band)]);
+  [3,7,12,20,30,50,70,80,88,93,97].forEach(p=>cand.add(pct(hist, w*band, p)));
+
+  let best=null;
+  for(const t of cand){
+    if(t<=0 || t>=255) continue;
+    for(const pol of [0,1]){
+      const row=bestRow(blobs(g,w,h,band,t,pol), w, h);
+      if(row && (!best || row.score>best.score)) best=row;
+    }
+  }
+  if(!best){ comb(0); setStatus('No wells found — click anywhere on the gel to place a label by hand.'); return; }
+
+  const wells = best.items.sort((a,b)=>a.x0-b.x0).map(b=>({
+    cx:(b.x0+b.x1+1)/2/s, top:b.y0/s, bot:(b.y1+1)/s, w:(b.x1-b.x0+1)/s, h:(b.y1-b.y0+1)/s
+  }));
+
+  labels.slice().forEach(remove); deselect();
+  lastWells=wells;
+
+  const mw=median(wells.map(v=>v.w));
+  const size=clamp(Math.round(Math.min(mw*0.62, natH*0.045)), 9, 200);
+  const rot=+$('wellrot').value, anc=wellAnchor();
+  wells.forEach((v,i)=> make(v.cx, wellPos(v), size, i, rot, anc));
+  comb(wells.length);
+  setStatus(`${wells.length} well${wells.length===1?'':'s'} found — click a label to type into it.`);
+}
+function pct(hist,n,p){
+  const target=n*p/100; let acc=0;
+  for(let i=0;i<256;i++){ acc+=hist[i]; if(acc>=target) return i; }
+  return 255;
+}
+function otsu(hist,n){
+  let sum=0; for(let i=0;i<256;i++) sum+=i*hist[i];
+  let sumB=0,wB=0,mx=-1,thr=128;
+  for(let i=0;i<256;i++){
+    wB+=hist[i]; if(!wB) continue;
+    const wF=n-wB; if(!wF) break;
+    sumB+=i*hist[i];
+    const mB=sumB/wB, mF=(sum-sumB)/wF, v=wB*wF*(mB-mF)*(mB-mF);
+    if(v>mx){mx=v;thr=i;}
+  }
+  return thr;
+}
+
+function blobs(g,w,h,rows,t,pol){
+  const on = pol===0 ? (v=>v<t) : (v=>v>t);
+  const seen=new Uint8Array(w*rows), out=[];
+  const stack=new Int32Array(w*rows);
+  const maxArea=w*rows*0.28;
+  for(let i=0;i<w*rows;i++){
+    if(seen[i] || !on(g[i])) continue;
+    let sp=0; stack[sp++]=i; seen[i]=1;
+    let x0=1e9,x1=-1,y0=1e9,y1=-1,area=0;
+    while(sp){
+      const p=stack[--sp], x=p%w, y=(p/w)|0;
+      area++;
+      if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
+      if(x>0){const q=p-1; if(!seen[q]&&on(g[q])){seen[q]=1;stack[sp++]=q;}}
+      if(x<w-1){const q=p+1; if(!seen[q]&&on(g[q])){seen[q]=1;stack[sp++]=q;}}
+      if(y>0){const q=p-w; if(!seen[q]&&on(g[q])){seen[q]=1;stack[sp++]=q;}}
+      if(y<rows-1){const q=p+w; if(!seen[q]&&on(g[q])){seen[q]=1;stack[sp++]=q;}}
+    }
+    if(area>maxArea) continue;
+    const bw=x1-x0+1, bh=y1-y0+1;
+    if(bw<Math.max(3,w*0.008) || bw>w*0.22) continue;
+    if(bh<2 || bh>h*0.16) continue;
+    if(area/(bw*bh) < 0.45) continue;                // wells read as filled rectangles
+    const ar=bw/bh; if(ar<0.25 || ar>14) continue;
+    out.push({x0,x1,y0,y1,bw,bh,area,cy:(y0+y1)/2});
+  }
+  return out;
+}
+
+function cv(v){                                      // coefficient of variation
+  const m=v.reduce((a,b)=>a+b,0)/v.length;
+  if(m<=0) return 9;
+  return Math.sqrt(v.reduce((a,b)=>a+(b-m)*(b-m),0)/v.length)/m;
+}
+function bestRow(list,w,h){
+  if(list.length<2) return null;
+  const arr=[...list].sort((a,b)=>a.cy-b.cy);
+  const tol=Math.max(4, h*0.035);
+  let best=null;
+  for(let i=0;i<arr.length;i++){
+    const group=[arr[i]];
+    for(let j=i+1;j<arr.length && arr[j].cy-arr[i].cy<=tol;j++) group.push(arr[j]);
+    if(group.length<2) continue;
+
+    const mw0=median(group.map(b=>b.bw));
+    let kept=group.filter(b=>b.bw>=mw0*0.4 && b.bw<=mw0*2.5).sort((a,b)=>a.x0-b.x0);
+    const ded=[];                                    // one blob per lane
+    for(const b of kept){
+      const last=ded[ded.length-1];
+      if(last && b.x0<=last.x1){ if(b.bw*b.bh > last.bw*last.bh) ded[ded.length-1]=b; }
+      else ded.push(b);
+    }
+    kept=ded;
+    if(kept.length<2) continue;
+
+    const span=Math.max(...kept.map(b=>b.x1))-Math.min(...kept.map(b=>b.x0));
+    if(span < w*0.12) continue;
+
+    const wcv=cv(kept.map(b=>b.bw)), hcv=cv(kept.map(b=>b.bh));
+    if(wcv>0.35 || hcv>0.5) continue;                // a comb cuts identical wells
+
+    const cys=kept.map(b=>b.cy), mh=median(kept.map(b=>b.bh));
+    if(Math.max(...cys)-Math.min(...cys) > Math.max(3, mh)) continue;
+
+    let reg=0.35;
+    if(kept.length>=3){
+      const c=kept.map(b=>(b.x0+b.x1)/2), gaps=[];
+      for(let k=0;k<c.length-1;k++) gaps.push(c[k+1]-c[k]);
+      const m=gaps.reduce((a,b)=>a+b,0)/gaps.length;
+      if(m<=0) continue;
+      reg=Math.max(0, 1-cv(gaps));
+      if(reg<0.72) continue;                         // lanes are evenly spaced
+      const mw=median(kept.map(b=>b.bw));
+      if(mw/m<0.15 || mw/m>0.98) continue;
+      if(mw < Math.max(4, w*0.015)) continue;        // reject speckle rows
+    }
+
+    const cy=median(cys);
+    const score = reg*10 + (1-wcv)*4 + (1-cy/h)*5 + Math.min(kept.length,10)*0.6 + (span/w)*2;
+    if(!best || score>best.score) best={items:kept, score};
+  }
+  return best;
+}
+
+
+/* --------------------------------------------------------------- save */
+function showFormat(){
+  if(!srcBuf){ $('fmt').textContent=''; return; }
+  const kind = isPng(srcBuf) ? 'PNG'
+             : /jpe?g/i.test(srcFile&&srcFile.type||'') ? 'JPEG'
+             : (srcFile&&srcFile.type||'image').replace('image/','').toUpperCase();
+  const bits = srcInfo ? `${srcInfo.depth}-bit ${srcInfo.ctype===0?'grey':srcInfo.ctype===2?'RGB':'indexed'}` : '8-bit';
+  $('fmt').textContent=`source: ${kind} · ${bits} · ${natW}×${natH}`+(srcDpi?` · ${srcDpi.x} dpi`:'');
+}
+
+/* labels rasterised on their own, so the same pixels can be composited into
+   either an 8-bit canvas or the full-depth samples of the original file     */
+function renderLabels(){
+  const c=document.createElement('canvas'); c.width=natW; c.height=natH;
+  const x=c.getContext('2d',{willReadFrequently:true});
+  const fam=$('font').value, weight=$('bold').checked?'700':'400';
+  labels.forEach(l=>{
+    const txt=textOf(l);
+    if(!txt.trim()) return;
+    x.font=`${weight} ${l.size}px ${fam}`;
+    x.fillStyle=colourOf(l);
+    const lines=txt.split('\n'), lh=l.size*1.2;
+    const H=lines.length*lh;
+    const W=Math.max(...lines.map(t=>x.measureText(t).width));
+    const [tx,ty]=offsets(l,W,H);              // same geometry the screen uses
+    x.save();
+    x.translate(l.cx+tx, l.y+ty);
+    x.rotate(l.rot*Math.PI/180);
+    x.textAlign='left'; x.textBaseline='top';
+    lines.forEach((ln,i)=> x.fillText(ln, (W-x.measureText(ln).width)/2, i*lh + l.size*0.1));
+    x.restore();
+  });
+  return c;
+}
+
+function outDpi(){
+  const v=$('dpi').value;
+  return v ? {x:+v, y:+v} : srcDpi;
+}
+function carried(sameType){
+  return (srcInfo && srcBuf ? [...pngChunks(srcBuf)] : [])
+    .filter(c=>/^(sRGB|gAMA|cHRM|iCCP)$/.test(c.type))
+    .filter(c=>sameType || !/^(iCCP|cHRM)$/.test(c.type))   // a profile for the old colour type would lie
+    .map(c=>mkChunk(c.type, c.data.slice()));
+}
+
+/* keeps the original bit depth and colour type all the way to disk */
+async function saveNative(layer, chromatic){
+  const dec=await decodePng(srcBuf);
+  if(!dec || dec.w!==natW || dec.h!==natH) return null;
+  const depth=dec.depth, MAX=depth===16?65535:255, up=depth===16?257:1;
+  const Arr=depth===16?Uint16Array:Uint8Array;
+  let ch=dec.ch, arr=Arr.from(dec.data);
+
+  if(bw && ch===3){
+    const g=new Arr(natW*natH);
+    for(let i=0,p=0;i<g.length;i++,p+=3) g[i]=(0.299*arr[p]+0.587*arr[p+1]+0.114*arr[p+2]+0.5)|0;
+    arr=g; ch=1;
+  }
+  if(inv) for(let i=0;i<arr.length;i++) arr[i]=MAX-arr[i];
+  if(ch===1 && chromatic){                     // a red label cannot live in a grey file
+    const r=new Arr(natW*natH*3);
+    for(let i=0,p=0;i<natW*natH;i++,p+=3) r[p]=r[p+1]=r[p+2]=arr[i];
+    arr=r; ch=3;
+  }
+
+  const lab=layer.getContext('2d').getImageData(0,0,natW,natH).data;
+  for(let i=0,p=0;i<natW*natH;i++,p+=ch){
+    const a=lab[i*4+3];
+    if(!a) continue;
+    const f=a/255, g=1-f;
+    if(ch===1) arr[p]=(arr[p]*g + lab[i*4]*up*f + 0.5)|0;
+    else for(let k=0;k<3;k++) arr[p+k]=(arr[p+k]*g + lab[i*4+k]*up*f + 0.5)|0;
+  }
+
+  const dpi=outDpi(), extra=[];
+  if(dpi) extra.push(makePhys(dpi.x,dpi.y));
+  carried(ch===dec.ch).forEach(c=>extra.push(c));
+  const bytes=await encodePng(arr, natW, natH, depth, ch===1?0:2, extra);
+  return {bytes, desc:`${depth}-bit ${ch===1?'grey':'RGB'}`+(dpi?` · ${dpi.x} dpi`:'')};
+}
+
+/* fallback for JPEG, HEIC, palette and interlaced sources */
+async function saveFlat(layer){
+  const c=document.createElement('canvas'); c.width=natW; c.height=natH;
+  const x=c.getContext('2d');
+  x.drawImage(proc,0,0); x.drawImage(layer,0,0);
+  const b=await new Promise(r=>c.toBlob(r,'image/png'));
+  let bytes=new Uint8Array(await b.arrayBuffer());
+  const dpi=outDpi(), extra=[];
+  if(dpi) extra.push(makePhys(dpi.x,dpi.y));
+  carried(true).forEach(c2=>extra.push(c2));
+  if(extra.length) bytes=insertChunks(bytes, extra);
+  return {bytes, desc:'8-bit RGB'+(dpi?` · ${dpi.x} dpi`:'')};
+}
+
+$('save').onclick=async ()=>{
+  stopEdit();
+  setStatus('Rendering…');
+  const layer=renderLabels();
+  const chromatic=labels.some(l=>textOf(l).trim() && colourOf(l)!=='#ffffff');
+
+  let res=null;
+  if(nativeReady(srcInfo)){
+    try{ res=await saveNative(layer, chromatic); }
+    catch(e){ res=null; }
+  }
+  if(!res) res=await saveFlat(layer);
+
+  let bytes=res.bytes, note='';
+  if($('embed').checked && srcBuf){
+    try{
+      const meta={
+        v:1, w:natW, h:natH,
+        fx:{bw,inv}, font:$('font').value, bold:$('bold').checked,
+        side:$('side').value, wellrot:+$('wellrot').value, dpi:$('dpi').value,
+        srcType:(srcFile&&srcFile.type)||'image/png', srcName:(srcFile&&srcFile.name)||'',
+        wells:lastWells,
+        labels:labels.map(l=>({cx:l.cx, y:l.y, size:l.size, colour:l.colour,
+                               rot:l.rot, anchor:l.anchor, wi:l.wi, t:textOf(l)}))
+      };
+      bytes=insertChunks(bytes, [mkChunk('iTXt', mkITXt(KEY, JSON.stringify(meta))),
+                                 mkChunk('geLb', srcBuf)]);
+      note=` · re-editable (+${(srcBuf.length/1048576).toFixed(1)} MB)`;
+    }catch(e){ note=' · could not embed the source, saved flat'; }
+  }
+
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([bytes],{type:'image/png'}));
+  a.download='gel-labelled.png';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  setStatus(`Saved gel-labelled.png · ${res.desc}${note}`);
+};
+
+})();
+</script>
+</body>
+</html>
