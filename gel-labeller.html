@@ -57,6 +57,27 @@
   .lab.sel{outline-color:var(--accent)}
   .lab.edit{cursor:text;user-select:text}
   .lab.empty::after{content:"label";opacity:.45;font-style:italic}
+  .prep{position:absolute;inset:0;line-height:normal;cursor:crosshair}
+  .wrap.prepmode .ovl{display:none}
+  .cropbox{position:absolute;box-shadow:0 0 0 9999px rgba(8,10,14,.62);
+    border:1px solid var(--accent);cursor:move;
+    background-image:linear-gradient(90deg,rgba(255,255,255,.2) 1px,transparent 1px),
+                     linear-gradient(rgba(255,255,255,.2) 1px,transparent 1px);
+    background-size:33.333% 100%,100% 33.333%;
+    background-position:33.333% 0,0 33.333%}
+  .cropbox.hidden{display:none}
+  .cropbox i{position:absolute;width:13px;height:13px;background:var(--accent);
+             border:1px solid #12151a;border-radius:2px}
+  .cropbox i[data-h=nw]{left:-7px;top:-7px;cursor:nwse-resize}
+  .cropbox i[data-h=n ]{left:calc(50% - 6px);top:-7px;cursor:ns-resize}
+  .cropbox i[data-h=ne]{right:-7px;top:-7px;cursor:nesw-resize}
+  .cropbox i[data-h=w ]{left:-7px;top:calc(50% - 6px);cursor:ew-resize}
+  .cropbox i[data-h=e ]{right:-7px;top:calc(50% - 6px);cursor:ew-resize}
+  .cropbox i[data-h=sw]{left:-7px;bottom:-7px;cursor:nesw-resize}
+  .cropbox i[data-h=s ]{left:calc(50% - 6px);bottom:-7px;cursor:ns-resize}
+  .cropbox i[data-h=se]{right:-7px;bottom:-7px;cursor:nwse-resize}
+  .lvl{position:absolute;height:0;border-top:2px dashed var(--accent);
+       transform-origin:0 50%;pointer-events:none}
   .band{position:absolute;border:1px solid var(--accent);background:rgba(255,157,61,.14);
         pointer-events:none;z-index:4}
 
@@ -103,6 +124,7 @@
     <div class="brand">Gel&nbsp;Labeller <span>/ agarose</span></div>
     <label class="file">Open image<input id="file" type="file" accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"></label>
     <button id="detect" disabled>Find wells</button>
+    <button id="cropbtn" disabled title="Crop and straighten the gel again">Crop / straighten</button>
     <select id="side" title="Where well labels are placed">
       <option value="below">Labels below wells</option>
       <option value="above">Labels above wells</option>
@@ -141,7 +163,7 @@
 <main id="main">
   <div class="drop" id="drop">
     <h1>Drop a gel image here</h1>
-    <p>PNG, JPEG, HEIC or HEIF. Wells are found automatically; click anywhere on the gel to add a label by hand. Reopen a re-editable PNG to pick up where you left off.</p>
+    <p>PNG, JPEG, HEIC or HEIF. You'll crop and straighten it first, then wells are found automatically. Reopen a re-editable PNG to pick up where you left off.</p>
     <label class="file">Choose a file<input id="file2" type="file" accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"></label>
   </div>
 
@@ -149,6 +171,36 @@
     <div class="stage" id="stage">
       <canvas id="view"></canvas>
       <div class="ovl" id="ovl"></div>
+      <div class="prep" id="prepLayer" hidden>
+        <div class="cropbox" id="cropBox">
+          <i data-h="nw"></i><i data-h="n "></i><i data-h="ne"></i>
+          <i data-h="w "></i><i data-h="e "></i>
+          <i data-h="sw"></i><i data-h="s "></i><i data-h="se"></i>
+        </div>
+        <div class="lvl" id="lvl" hidden></div>
+      </div>
+    </div>
+    <div class="tools" id="prepTools" hidden>
+      <div class="grp">
+        <button class="sw" id="rotL" title="Rotate a quarter turn left">&#8630;</button>
+        <button class="sw" id="rotR" title="Rotate a quarter turn right">&#8631;</button>
+      </div>
+      <div class="sep"></div>
+      <div class="grp">
+        <span class="cap">Straighten</span>
+        <input type="range" id="angle" min="-45" max="45" step="0.1" value="0" title="Arrow keys nudge by 0.1°">
+        <span class="pt" id="angpt">0.0°</span>
+      </div>
+      <div class="sep"></div>
+      <div class="grp">
+        <button id="lineBtn" class="tgl" title="Drag along something that should be level">Level line</button>
+        <button id="fitBtn" title="Largest crop with no empty corners">Fit</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+      <div class="grp" style="margin-left:auto">
+        <span class="count" id="prepInfo"></span>
+        <button id="applyBtn" class="primary">Use this gel &rarr;</button>
+      </div>
     </div>
     <div class="tools off" id="tools">
       <div class="grp">
@@ -205,8 +257,11 @@ const src  = document.createElement('canvas');                  // pristine orig
 const sctx = src.getContext('2d');
 const proc = document.createElement('canvas');                  // after greyscale / invert
 const pctx = proc.getContext('2d',{willReadFrequently:true});
+const orig = document.createElement('canvas');                  // whole image, before cropping
+const octx = orig.getContext('2d');
 
-let natW=0, natH=0, hasImage=false;
+let natW=0, natH=0, origW=0, origH=0, hasImage=false, edgeRGB=null;
+let geom={angle:0, crop:{x:0,y:0,w:1,h:1}};
 let labels=[], sels=[], primary=null, editing=null, uid=0, lastWells=[];
 let bw=false, inv=false, srcFile=null, srcBuf=null, srcInfo=null, srcDpi=null;
 
@@ -456,6 +511,279 @@ function sourceDpi(u8){
   return jpegDpi(u8);
 }
 
+
+/* ------------------------------------------------- crop and straighten
+   Geometry is kept as parameters, never baked into an intermediate 8-bit
+   bitmap: the preview rotates a canvas copy, while export re-samples the
+   original file's own samples, so a 16-bit gel stays 16-bit after cropping. */
+function rotBox(w,h,deg){
+  const a=deg*Math.PI/180, c=Math.abs(Math.cos(a)), s=Math.abs(Math.sin(a));
+  return {RW:w*c+h*s, RH:w*s+h*c};
+}
+function cropPx(g){
+  const {RW,RH}=rotBox(origW,origH,g.angle);
+  return {x:g.crop.x*RW, y:g.crop.y*RH, w:g.crop.w*RW, h:g.crop.h*RH, RW, RH};
+}
+function toOrig(p,g){                          // cropped frame -> original pixels
+  const a=g.angle*Math.PI/180, c=cropPx(g);
+  const px=p.x+c.x-c.RW/2, py=p.y+c.y-c.RH/2;
+  const cs=Math.cos(-a), sn=Math.sin(-a);
+  return {x:cs*px-sn*py+origW/2, y:sn*px+cs*py+origH/2};
+}
+function fromOrig(p,g){                        // original pixels -> cropped frame
+  const a=g.angle*Math.PI/180, c=cropPx(g);
+  const dx=p.x-origW/2, dy=p.y-origH/2;
+  const cs=Math.cos(a), sn=Math.sin(a);
+  return {x:cs*dx-sn*dy+c.RW/2-c.x, y:sn*dx+cs*dy+c.RH/2-c.y};
+}
+const totalAngle = ()=> prep.quarter*90 + prep.fine;
+
+/* largest centred rectangle, in the source's own proportions, that contains
+   no empty corner — one click to clean up after straightening               */
+function fitCrop(){
+  const g={angle:totalAngle(), crop:{x:0,y:0,w:1,h:1}};
+  const {RW,RH}=rotBox(origW,origH,g.angle);
+  const inside=t=>{
+    const w=origW*t, h=origH*t;
+    const x0=(RW-w)/2, y0=(RH-h)/2;
+    return [[x0,y0],[x0+w,y0],[x0,y0+h],[x0+w,y0+h]].every(([x,y])=>{
+      const p=toOrig({x,y},g);
+      return p.x>=0 && p.y>=0 && p.x<=origW && p.y<=origH;
+    });
+  };
+  let lo=0, hi=1.2;
+  for(let i=0;i<30;i++){ const m=(lo+hi)/2; if(inside(m)) lo=m; else hi=m; }
+  const w=origW*lo, h=origH*lo;
+  prep.crop={x:(RW-w)/2/RW, y:(RH-h)/2/RH, w:w/RW, h:h/RH};
+}
+
+let mode='label';
+let prep={quarter:0, fine:0, crop:{x:0,y:0,w:1,h:1}, line:false};
+const IDENT={angle:0, crop:{x:0,y:0,w:1,h:1}};
+
+function borderRGB(){
+  const w=orig.width, h=orig.height, acc=[0,0,0]; let n=0;
+  const take=(x,y,ww,hh)=>{
+    const d=octx.getImageData(x,y,ww,hh).data;
+    for(let i=0;i<d.length;i+=4){ acc[0]+=d[i]; acc[1]+=d[i+1]; acc[2]+=d[i+2]; n++; }
+  };
+  take(0,0,w,1); take(0,h-1,w,1); take(0,0,1,h); take(w-1,0,1,h);
+  return acc.map(v=>Math.round(v/Math.max(1,n)));
+}
+function borderCss(){ const c=edgeRGB||[0,0,0]; return `rgb(${c[0]},${c[1]},${c[2]})`; }
+
+/* renders the working 8-bit image the labeller sees; export redoes this at
+   full depth from the original file's own samples                          */
+function buildWorking(){
+  const cp=cropPx(geom);
+  natW=Math.max(1,Math.round(cp.w)); natH=Math.max(1,Math.round(cp.h));
+  src.width=natW; src.height=natH;
+  sctx.setTransform(1,0,0,1,0,0);
+  sctx.fillStyle=borderCss(); sctx.fillRect(0,0,natW,natH);
+  sctx.imageSmoothingQuality='high';
+  sctx.translate(-cp.x,-cp.y);
+  sctx.translate(cp.RW/2,cp.RH/2);
+  sctx.rotate(geom.angle*Math.PI/180);
+  sctx.drawImage(orig,-origW/2,-origH/2);
+  sctx.setTransform(1,0,0,1,0,0);
+  proc.width=natW; proc.height=natH;
+  view.width=natW; view.height=natH;
+  wrap.style.width=natW+'px';
+}
+
+function enterPrep(fresh){
+  mode='prep';
+  if(fresh) prep={quarter:0, fine:0, crop:{x:0,y:0,w:1,h:1}, line:false};
+  else{
+    const q=Math.round(geom.angle/90);
+    prep={quarter:q, fine:geom.angle-90*q, crop:{...geom.crop}, line:false};
+  }
+  $('angle').value=prep.fine;
+  $('lineBtn').classList.remove('on');
+  wrap.classList.add('prepmode');
+  $('prepLayer').hidden=false; $('prepTools').hidden=false; $('tools').hidden=true;
+  ['detect','save','clear','cropbtn'].forEach(id=>$(id).disabled=true);
+  drawPrep();
+  setStatus('Drag the frame to crop. Straighten with the slider, or draw a level line along the wells.');
+}
+
+function drawPrep(){
+  const a=totalAngle(), {RW,RH}=rotBox(origW,origH,a);
+  const ps=Math.min(1, 1700/Math.max(RW,RH));
+  view.width=Math.max(1,Math.round(RW*ps)); view.height=Math.max(1,Math.round(RH*ps));
+  wrap.style.width=view.width+'px';
+  vctx.setTransform(1,0,0,1,0,0);
+  vctx.fillStyle=borderCss(); vctx.fillRect(0,0,view.width,view.height);
+  vctx.translate(view.width/2, view.height/2);
+  vctx.rotate(a*Math.PI/180);
+  vctx.scale(ps,ps);
+  vctx.imageSmoothingQuality='high';
+  vctx.drawImage(orig,-origW/2,-origH/2);
+  vctx.setTransform(1,0,0,1,0,0);
+  $('angpt').textContent=(prep.fine>=0?'+':'')+prep.fine.toFixed(1)+'\u00b0';
+  placeCrop();
+}
+function placeCrop(){
+  const b=$('cropBox'), c=prep.crop;
+  b.style.left=(c.x*100)+'%'; b.style.top=(c.y*100)+'%';
+  b.style.width=(c.w*100)+'%'; b.style.height=(c.h*100)+'%';
+  const {RW,RH}=rotBox(origW,origH,totalAngle());
+  $('prepInfo').textContent=`${Math.round(c.w*RW)} \u00d7 ${Math.round(c.h*RH)} px`;
+}
+
+function applyPrep(){
+  const old=geom;
+  geom={angle:totalAngle(), crop:{...prep.crop}};
+  buildWorking();
+  if(labels.length){                            // labels follow the gel through the change
+    labels.forEach(l=>{
+      const p=fromOrig(toOrig({x:l.cx,y:l.y}, old), geom);
+      l.cx=p.x; l.y=p.y;
+    });
+    lastWells=lastWells.map(v=>{
+      const a=fromOrig(toOrig({x:v.cx,y:v.top},old),geom);
+      const b=fromOrig(toOrig({x:v.cx,y:v.bot},old),geom);
+      return {...v, cx:a.x, top:a.y, bot:b.y};
+    });
+  }
+  applyFx();
+  rescale();
+  mode='label';
+  wrap.classList.remove('prepmode');
+  $('prepLayer').hidden=true; $('prepTools').hidden=true; $('tools').hidden=false;
+  ['detect','save','clear','cropbtn'].forEach(id=>$(id).disabled=false);
+  showFormat();
+  if(!labels.length) findWells();
+  else{ labels.forEach(l=>{ place(l); paint(l); }); setStatus('Crop updated — labels moved with the gel.'); }
+}
+
+$('angle').addEventListener('input', e=>{ prep.fine=+e.target.value; drawPrep(); });
+$('rotL').onclick=()=>{ prep.quarter--; drawPrep(); };
+$('rotR').onclick=()=>{ prep.quarter++; drawPrep(); };
+$('fitBtn').onclick=()=>{ fitCrop(); placeCrop(); };
+$('resetBtn').onclick=()=>{ prep.quarter=0; prep.fine=0; prep.crop={x:0,y:0,w:1,h:1};
+                            $('angle').value=0; drawPrep(); };
+$('applyBtn').onclick=applyPrep;
+$('cropbtn').onclick=()=>enterPrep(false);
+$('lineBtn').onclick=()=>{
+  prep.line=!prep.line;
+  $('lineBtn').classList.toggle('on',prep.line);
+  $('cropBox').classList.toggle('hidden',prep.line);
+  setStatus(prep.line ? 'Drag along an edge that should be level — the well row works well.'
+                      : 'Drag the frame to crop.');
+};
+
+/* dragging the crop frame */
+$('cropBox').addEventListener('pointerdown', ev=>{
+  ev.preventDefault(); ev.stopPropagation();
+  const r=view.getBoundingClientRect();
+  const h=(ev.target.dataset.h||'move').trim();
+  const s0={...prep.crop}, x0=ev.clientX, y0=ev.clientY;
+  const MIN=0.03;
+  const mv=e=>{
+    const dx=(e.clientX-x0)/r.width, dy=(e.clientY-y0)/r.height;
+    let {x,y,w,h:hh}=s0;
+    if(h==='move'){ x=clamp(x+dx,0,1-w); y=clamp(y+dy,0,1-hh); }
+    else{
+      if(h.includes('w')){ const nx=clamp(x+dx,0,x+w-MIN); w+=x-nx; x=nx; }
+      if(h.includes('e')){ w=clamp(w+dx,MIN,1-x); }
+      if(h.includes('n')){ const ny=clamp(y+dy,0,y+hh-MIN); hh+=y-ny; y=ny; }
+      if(h.includes('s')){ hh=clamp(hh+dy,MIN,1-y); }
+    }
+    prep.crop={x,y,w,h:hh};
+    placeCrop();
+  };
+  const up=()=>{ window.removeEventListener('pointermove',mv); window.removeEventListener('pointerup',up); };
+  window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up);
+});
+
+/* drawing a level line */
+$('prepLayer').addEventListener('pointerdown', ev=>{
+  if(!prep.line) return;
+  ev.preventDefault();
+  const r=view.getBoundingClientRect(), el=$('lvl');
+  const x0=ev.clientX-r.left, y0=ev.clientY-r.top;
+  el.hidden=false;
+  const mv=e=>{
+    const dx=e.clientX-r.left-x0, dy=e.clientY-r.top-y0;
+    el.style.left=x0+'px'; el.style.top=y0+'px';
+    el.style.width=Math.hypot(dx,dy)+'px';
+    el.style.transform=`rotate(${Math.atan2(dy,dx)}rad)`;
+  };
+  const up=e=>{
+    window.removeEventListener('pointermove',mv); window.removeEventListener('pointerup',up);
+    el.hidden=true;
+    const dx=e.clientX-r.left-x0, dy=e.clientY-r.top-y0;
+    if(Math.hypot(dx,dy)<12) return;
+    let d=Math.atan2(dy,dx)*180/Math.PI;
+    d=((d%180)+180)%180;                        // direction only, not which way it was drawn
+    const corr = d<45 ? -d : d>135 ? 180-d : 90-d;
+    let f=prep.fine+corr;
+    while(f>45){ f-=90; prep.quarter++; }
+    while(f<-45){ f+=90; prep.quarter--; }
+    prep.fine=clamp(f,-45,45);
+    $('angle').value=prep.fine;
+    prep.line=false; $('lineBtn').classList.remove('on'); $('cropBox').classList.remove('hidden');
+    drawPrep();
+    setStatus(`Straightened by ${corr>=0?'+':''}${corr.toFixed(2)}\u00b0.`);
+  };
+  window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up);
+});
+
+/* --------------------------- the same geometry, at the source's own depth */
+function borderValue(dec){
+  const {w,h,ch,data}=dec, acc=new Float64Array(ch);
+  let n=0;
+  const stepX=Math.max(1,w>>8), stepY=Math.max(1,h>>8);
+  for(const y of [0,h-1]) for(let x=0;x<w;x+=stepX){ const p=(y*w+x)*ch; for(let k=0;k<ch;k++) acc[k]+=data[p+k]; n++; }
+  for(const x of [0,w-1]) for(let y=0;y<h;y+=stepY){ const p=(y*w+x)*ch; for(let k=0;k<ch;k++) acc[k]+=data[p+k]; n++; }
+  return Array.from(acc, v=>Math.round(v/Math.max(1,n)));
+}
+function applyGeomFull(dec){
+  const {w:W,h:H,ch,depth,data}=dec, cp=cropPx(geom);
+  const level=Math.abs(geom.angle)<1e-9;
+  if(level && Math.round(cp.x)===0 && Math.round(cp.y)===0 && natW===W && natH===H)
+    return {data, ch};                          // nothing to do, hand back the originals
+  const Arr=depth===16?Uint16Array:Uint8Array;
+  const out=new Arr(natW*natH*ch);
+  const fill=borderValue(dec);
+
+  if(level){                                    // a straight crop copies pixels, never resamples
+    const ox=Math.round(cp.x), oy=Math.round(cp.y);
+    for(let j=0;j<natH;j++){
+      const sy=oy+j;
+      for(let i=0;i<natW;i++){
+        const sx=ox+i, o=(j*natW+i)*ch;
+        if(sx<0||sy<0||sx>=W||sy>=H){ for(let k=0;k<ch;k++) out[o+k]=fill[k]; continue; }
+        const p=(sy*W+sx)*ch;
+        for(let k=0;k<ch;k++) out[o+k]=data[p+k];
+      }
+    }
+    return {data:out, ch};
+  }
+
+  const a=-geom.angle*Math.PI/180, cs=Math.cos(a), sn=Math.sin(a);
+  for(let j=0;j<natH;j++){
+    const py=cp.y+j+0.5-cp.RH/2;
+    for(let i=0;i<natW;i++){
+      const px=cp.x+i+0.5-cp.RW/2;
+      const fx=cs*px-sn*py+W/2-0.5, fy=sn*px+cs*py+H/2-0.5;
+      const o=(j*natW+i)*ch;
+      if(fx<-0.5||fy<-0.5||fx>W-0.5||fy>H-0.5){ for(let k=0;k<ch;k++) out[o+k]=fill[k]; continue; }
+      const x0=Math.floor(fx), y0=Math.floor(fy), tx=fx-x0, ty=fy-y0;
+      const xa=clamp(x0,0,W-1), xb=clamp(x0+1,0,W-1);
+      const ya=clamp(y0,0,H-1), yb=clamp(y0+1,0,H-1);
+      const p00=(ya*W+xa)*ch, p10=(ya*W+xb)*ch, p01=(yb*W+xa)*ch, p11=(yb*W+xb)*ch;
+      for(let k=0;k<ch;k++){
+        const v=(data[p00+k]*(1-tx)+data[p10+k]*tx)*(1-ty)
+               +(data[p01+k]*(1-tx)+data[p11+k]*tx)*ty;
+        out[o+k]=(v+0.5)|0;
+      }
+    }
+  }
+  return {data:out, ch};
+}
+
 /* ------------------------------------------------------------ loading */
 async function decode(file, name){
   const heic = /hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(name||file.name||'');
@@ -493,32 +821,34 @@ async function openFile(file){
   try{ bmp = await decode(from, (meta&&meta.srcName)||file.name); }
   catch(e){ setStatus(e.message||'That file could not be read. Try PNG or JPEG.'); return; }
 
-  natW=bmp.width; natH=bmp.height;
-  src.width=natW;  src.height=natH;  sctx.drawImage(bmp,0,0);
-  proc.width=natW; proc.height=natH;
-  view.width=natW; view.height=natH;
+  origW=bmp.width; origH=bmp.height;
+  orig.width=origW; orig.height=origH; octx.drawImage(bmp,0,0);
   bmp.close && bmp.close();
+  edgeRGB=borderRGB();
 
   labels.forEach(l=>l.el.remove());
   labels=[]; sels=[]; primary=null; editing=null; lastWells=[];
   hasImage=true; drop.hidden=true; wrap.hidden=false;
-  wrap.style.width=natW+'px';
-  ['detect','save','clear','bw','inv'].forEach(id=>$(id).disabled=false);
+  ['bw','inv'].forEach(id=>$(id).disabled=false);
   srcFile = srcBytes ? new Blob([srcBytes],{type:(meta&&meta.srcType)||'image/png'}) : file;
   srcBuf  = srcBytes || rawBuf;
   srcInfo = srcBuf ? pngInfo(srcBuf) : null;
   srcDpi  = srcBuf ? sourceDpi(srcBuf) : null;
-  showFormat();
 
   const editable = meta && srcBytes;
-  if(editable) applySettings(meta);
-  applyFx();
-  rescale();
-
-  if(editable) restoreLabels(meta);
-  else{
+  if(editable){
+    applySettings(meta);
+    geom = meta.geom || {angle:0, crop:{x:0,y:0,w:1,h:1}};
+    buildWorking();
+    applyFx();
+    rescale();
+    showFormat();
+    ['detect','save','clear','cropbtn'].forEach(id=>$(id).disabled=false);
+    restoreLabels(meta);
+  }else{
     if(meta) setStatus('This PNG has label positions but no embedded source, so the labels are already part of the picture.');
-    findWells();
+    geom={angle:0, crop:{x:0,y:0,w:1,h:1}};
+    enterPrep(true);
   }
 }
 
@@ -1068,7 +1398,9 @@ function showFormat(){
              : /jpe?g/i.test(srcFile&&srcFile.type||'') ? 'JPEG'
              : (srcFile&&srcFile.type||'image').replace('image/','').toUpperCase();
   const bits = srcInfo ? `${srcInfo.depth}-bit ${srcInfo.ctype===0?'grey':srcInfo.ctype===2?'RGB':'indexed'}` : '8-bit';
-  $('fmt').textContent=`source: ${kind} · ${bits} · ${natW}×${natH}`+(srcDpi?` · ${srcDpi.x} dpi`:'');
+  const dims = (natW===origW && natH===origH) ? `${origW}×${origH}`
+             : `${origW}×${origH} → ${natW}×${natH}`;
+  $('fmt').textContent=`source: ${kind} · ${bits} · ${dims}`+(srcDpi?` · ${srcDpi.x} dpi`:'');
 }
 
 /* labels rasterised on their own, so the same pixels can be composited into
@@ -1110,10 +1442,11 @@ function carried(sameType){
 /* keeps the original bit depth and colour type all the way to disk */
 async function saveNative(layer, chromatic){
   const dec=await decodePng(srcBuf);
-  if(!dec || dec.w!==natW || dec.h!==natH) return null;
+  if(!dec || dec.w!==origW || dec.h!==origH) return null;
   const depth=dec.depth, MAX=depth===16?65535:255, up=depth===16?257:1;
   const Arr=depth===16?Uint16Array:Uint8Array;
-  let ch=dec.ch, arr=Arr.from(dec.data);
+  const geo=applyGeomFull(dec);                // crop + straighten at full depth
+  let ch=geo.ch, arr=Arr.from(geo.data);
 
   if(bw && ch===3){
     const g=new Arr(natW*natH);
@@ -1176,7 +1509,7 @@ $('save').onclick=async ()=>{
       const meta={
         v:1, w:natW, h:natH,
         fx:{bw,inv}, font:$('font').value, bold:$('bold').checked,
-        side:$('side').value, wellrot:+$('wellrot').value, dpi:$('dpi').value,
+        side:$('side').value, wellrot:+$('wellrot').value, dpi:$('dpi').value, geom,
         srcType:(srcFile&&srcFile.type)||'image/png', srcName:(srcFile&&srcFile.name)||'',
         wells:lastWells,
         labels:labels.map(l=>({cx:l.cx, y:l.y, size:l.size, colour:l.colour,
