@@ -119,6 +119,30 @@
   .drop p{color:var(--muted);font-size:13px;line-height:1.6;margin:0 0 18px}
   .drop.hot{border-color:var(--accent);background:#232a33}
 
+  /* ------------------------------------------------------------- tour */
+  .link{background:none;border:0;padding:6px 0;color:var(--accent);text-transform:none;
+        letter-spacing:.02em;font-size:12px;font-family:var(--mono);display:block;margin:12px auto 0}
+  .link:hover{background:none;text-decoration:underline}
+  .tour{position:fixed;inset:0;z-index:60}
+  .tour .dim{position:absolute;inset:0;background:rgba(8,10,14,.8)}
+  /* the ring's own huge shadow is the dimming, so the cut-out always tracks
+     whatever control the step is pointing at                               */
+  .tour .ring{position:fixed;border:1px solid var(--accent);border-radius:4px;pointer-events:none;
+       box-shadow:0 0 0 9999px rgba(8,10,14,.8),0 0 13px rgba(255,157,61,.5)}
+  .tour .card{position:fixed;width:min(345px,calc(100vw - 26px));background:var(--panel);
+       border:1px solid var(--line);border-radius:6px;padding:15px 16px 12px;
+       box-shadow:0 18px 50px rgba(0,0,0,.7)}
+  .tour h3{font-family:var(--mono);font-size:12px;letter-spacing:.13em;text-transform:uppercase;
+       margin:0 0 9px;color:var(--accent)}
+  .tour p{font-size:13px;line-height:1.65;color:var(--text);margin:0 0 13px}
+  .tour p+p{margin-top:-6px}
+  .tour b{color:#ffc180;font-weight:600}
+  .tour kbd{font-family:var(--mono);font-size:11px;background:#232a33;border:1px solid var(--line);
+       border-radius:3px;padding:1px 5px;color:var(--text)}
+  .tour .row{display:flex;align-items:center;gap:7px}
+  .tour .n{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted);margin-right:auto}
+  @media (max-width:560px){ .tour .card{width:calc(100vw - 20px)} }
+
   footer{flex:0 0 auto;background:var(--panel);border-top:1px solid var(--line);padding:7px 14px;
          font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;
          justify-content:space-between;gap:14px}
@@ -131,7 +155,8 @@
 <header>
   <div class="bar">
     <div class="brand">Gel&nbsp;Labeller <span>/ agarose</span></div>
-    <label class="file">Open image<input id="file" type="file" accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"></label>
+    <button id="guide" title="A quick tour of what everything does">Guide</button>
+    <label class="file" id="openBtn">Open image<input id="file" type="file" accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"></label>
     <button id="detect" disabled>Find wells</button>
     <button id="cropbtn" disabled title="Crop and straighten the gel again">Crop / straighten</button>
     <select id="side" title="Where well labels are placed">
@@ -174,6 +199,7 @@
     <h1>Drop a gel image here</h1>
     <p>PNG, JPEG, HEIC or HEIF. You'll crop and straighten it first, then wells are found automatically. Reopen a re-editable PNG to pick up where you left off.</p>
     <label class="file">Choose a file<input id="file2" type="file" accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"></label>
+    <button class="link" id="guide2">or take the tour &rarr;</button>
   </div>
 
   <div class="wrap" id="wrap" hidden>
@@ -256,6 +282,21 @@
   <div class="keys"><span>drag on gel</span> select many &nbsp;·&nbsp; <span>alt-drag</span> duplicate &nbsp;·&nbsp; <span>arrows</span> nudge &nbsp;·&nbsp;
     <span>Enter</span> deselect &nbsp;·&nbsp; <span>Shift+Enter</span> new line &nbsp;·&nbsp; <span>Del</span> remove</div>
 </footer>
+
+<div class="tour" id="tour" hidden>
+  <div class="dim" id="tourDim"></div>
+  <div class="ring" id="tourRing" hidden></div>
+  <div class="card" id="tourCard">
+    <h3 id="tourTitle"></h3>
+    <div id="tourBody"></div>
+    <div class="row">
+      <span class="n" id="tourN"></span>
+      <button id="tourEnd">Close</button>
+      <button id="tourPrev">Back</button>
+      <button id="tourNext" class="primary">Next</button>
+    </div>
+  </div>
+</div>
 <script>
 (() => {
 "use strict";
@@ -1573,6 +1614,123 @@ $('save').onclick=async ()=>{
   setStatus(`Saved gel-labelled.png · ${res.desc}${note}`);
 };
 
+/* ------------------------------------------------------------ the tour */
+/* Each step spotlights a real control, so the text always sits next to the
+   thing it describes. A step whose target is off screen (the gel tools
+   before an image is open) falls back to a plain centred card.            */
+const TOUR=[
+  {sel:'#openBtn', title:'1 · Open a gel',
+   html:`<p>Choose a <b>PNG, JPEG or HEIC</b>, or just drop one anywhere on this page.</p>
+         <p>Nothing is uploaded — the gel never leaves your browser.</p>`},
+
+  {sel:()=> mode==='prep' ? '#prepTools' : '#cropbtn', title:'2 · Crop &amp; straighten',
+   html:`<p>Every new gel starts here. Drag inside the frame to move it, or pull a corner
+         to resize. <b>Straighten</b> tilts by ±45° — the arrow keys nudge it by 0.1°.</p>
+         <p><b>Level line</b> is the quick way: drag along something that should be
+         horizontal, usually the row of wells, and the angle is worked out for you.
+         <b>Fit</b> then takes the largest crop with no empty corners.</p>
+         <p><b>Crop / straighten</b> reopens this at any time — your labels move with the gel.</p>`},
+
+  {sel:'#detect', title:'3 · Find wells',
+   html:`<p>Scans the top of the gel for the well row and puts an empty label under each one,
+         ready to type into. The comb strip below the toolbar lights up one tooth per well found.</p>`},
+
+  {sel:'#side', title:'4 · Where labels sit',
+   html:`<p>Put the well labels <b>below</b> or <b>above</b> the wells, and set whether new ones
+         read horizontally or run vertically up or down the lane.</p>`},
+
+  {sel:'#stage', title:'5 · Writing labels',
+   html:`<p>Click a label to type into it. <kbd>Enter</kbd> finishes,
+         <kbd>Shift</kbd>+<kbd>Enter</kbd> starts a new line.</p>
+         <p>Click bare gel to drop an extra label anywhere. Drag one to move it, and
+         <b>hold Alt/Option while dragging</b> to leave a copy behind.</p>
+         <p>Drag across the gel to select several, <kbd>Shift</kbd>-click to add one to the
+         selection, arrows nudge (with <kbd>Shift</kbd> for a bigger step), and
+         <kbd>Del</kbd> removes. A blank label you placed by hand tidies itself away.</p>`},
+
+  {sel:'#tools', title:'6 · Size, angle, colour, align',
+   html:`<p>Acts on whatever is selected. <b>Size</b> has an <b>all</b> tick to resize every label at once.</p>
+         <p><b>Colour A</b> reads the gel behind each label and picks black or white to suit it,
+         so labels stay readable over both dark and light backgrounds. <b>W</b> and <b>R</b>
+         force white or red.</p>
+         <p><b>Align</b> needs two or more selected — it lines up their edges or centres.</p>`},
+
+  {sel:'#bw', title:'7 · Greyscale &amp; invert',
+   html:`<p>Turn a colour scan greyscale, or flip a dark-background gel to bands-on-white
+         for print. Both affect the saved PNG, and <b>Colour A</b> re-reads the gel when you invert.</p>`},
+
+  {sel:'#font', title:'8 · Typeface',
+   html:`<p>Arial, Helvetica, Times or Courier, plus <b>Bold</b> — applied to every label.</p>`},
+
+  {sel:'#save', title:'9 · Save',
+   html:`<p>Writes a PNG at the gel's own resolution, with <b>DPI</b> recorded for the journal
+         that asks for it.</p>
+         <p>Leave <b>Re-editable</b> ticked and the source image and every label position are
+         tucked inside the PNG — reopen that file here later and you can carry on editing.
+         Untick it and the labels are flattened into the picture for good.</p>`}
+];
+
+let tstep=0;
+const tourEl=$('tour'), tRing=$('tourRing'), tCard=$('tourCard');
+const targetOf=s=>{
+  const sel=typeof s.sel==='function' ? s.sel() : s.sel;
+  const el=sel && document.querySelector(sel);
+  if(!el) return null;
+  const r=el.getBoundingClientRect();
+  return (r.width>4 && r.height>4 && r.bottom>0 && r.top<innerHeight) ? r : null;
+};
+function drawStep(){
+  const s=TOUR[tstep], r=targetOf(s);
+  $('tourTitle').innerHTML=s.title;
+  $('tourBody').innerHTML=s.html;
+  $('tourN').textContent=`${tstep+1} / ${TOUR.length}`;
+  $('tourPrev').disabled = tstep===0;
+  $('tourNext').textContent = tstep===TOUR.length-1 ? 'Done' : 'Next';
+
+  tRing.hidden=!r;
+  $('tourDim').hidden=!!r;                       // the ring carries its own dimming
+  const P=5;
+  if(r){
+    tRing.style.left=(r.left-P)+'px'; tRing.style.top=(r.top-P)+'px';
+    tRing.style.width=(r.width+P*2)+'px'; tRing.style.height=(r.height+P*2)+'px';
+  }
+  const M=12, cw=tCard.offsetWidth, ch=tCard.offsetHeight;
+  let left, top;
+  if(r){
+    top = r.bottom+P+M;
+    if(top+ch > innerHeight-M) top = r.top-P-M-ch;   // no room below, so go above
+    left = r.left + r.width/2 - cw/2;
+  }else{ left=(innerWidth-cw)/2; top=(innerHeight-ch)/2; }
+  tCard.style.left=Math.round(clamp(left, M, Math.max(M, innerWidth-cw-M)))+'px';
+  tCard.style.top =Math.round(clamp(top,  M, Math.max(M, innerHeight-ch-M)))+'px';
+}
+function tourGo(n){
+  tstep=clamp(n,0,TOUR.length-1);
+  drawStep();
+  requestAnimationFrame(drawStep);               // remeasure once the card has its real height
+}
+function openTour(){ tourEl.hidden=false; tourGo(0); $('tourNext').focus(); }
+function closeTour(){ tourEl.hidden=true; }
+
+$('guide').onclick=openTour;
+$('guide2').onclick=openTour;
+$('tourEnd').onclick=closeTour;
+$('tourPrev').onclick=()=>tourGo(tstep-1);
+$('tourNext').onclick=()=>{ if(tstep===TOUR.length-1) closeTour(); else tourGo(tstep+1); };
+addEventListener('resize', ()=>{ if(!tourEl.hidden) drawStep(); });
+/* Capture before the document handler: while the tour is up it is modal, so
+   none of the gel's shortcuts — Del, Ctrl+A, the arrows — may fire. Only
+   propagation is stopped, so Tab and Enter still work the buttons.        */
+addEventListener('keydown', ev=>{
+  if(tourEl.hidden) return;
+  ev.stopPropagation();
+  const k=ev.key;
+  if(k==='Escape'||k==='ArrowRight'||k==='ArrowLeft'){
+    ev.preventDefault();
+    if(k==='Escape') closeTour();
+    else tourGo(tstep + (k==='ArrowRight'?1:-1));
+  }
+}, true);
 })();
 </script>
 </body>
