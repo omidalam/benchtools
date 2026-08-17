@@ -12,6 +12,9 @@
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
   }
   *{box-sizing:border-box}
+  /* .wrap and .tools set display:flex, which out-ranks the UA sheet's
+     [hidden]{display:none} — without this they never actually hide.        */
+  [hidden]{display:none!important}
   html,body{height:100%}
   body{margin:0;background:var(--ink);color:var(--text);font-family:var(--sans);
        display:flex;flex-direction:column;overflow:hidden}
@@ -59,7 +62,13 @@
   .lab.empty::after{content:"label";opacity:.45;font-style:italic}
   .prep{position:absolute;inset:0;line-height:normal;cursor:crosshair}
   .wrap.prepmode .ovl{display:none}
-  .cropbox{position:absolute;box-shadow:0 0 0 9999px rgba(8,10,14,.62);
+  /* the handles straddle the frame edge, so the stage must not clip them
+     while cropping; the dimming outside the frame keeps its own clipper.   */
+  .wrap.prepmode .stage{overflow:visible}
+  .scrimclip{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+  .scrim{position:absolute;box-shadow:0 0 0 9999px rgba(8,10,14,.62)}
+  .scrim.hidden{display:none}
+  .cropbox{position:absolute;
     border:1px solid var(--accent);cursor:move;
     background-image:linear-gradient(90deg,rgba(255,255,255,.2) 1px,transparent 1px),
                      linear-gradient(rgba(255,255,255,.2) 1px,transparent 1px);
@@ -172,6 +181,7 @@
       <canvas id="view"></canvas>
       <div class="ovl" id="ovl"></div>
       <div class="prep" id="prepLayer" hidden>
+        <div class="scrimclip"><div class="scrim" id="scrim"></div></div>
         <div class="cropbox" id="cropBox">
           <i data-h="nw"></i><i data-h="n "></i><i data-h="ne"></i>
           <i data-h="w "></i><i data-h="e "></i>
@@ -251,6 +261,7 @@
 "use strict";
 const $ = id => document.getElementById(id);
 const view=$('view'), ovl=$('ovl'), wrap=$('wrap'), drop=$('drop'), tools=$('tools'), status=$('status');
+const mainEl=$('main');
 const vctx = view.getContext('2d');
 
 const src  = document.createElement('canvas');                  // pristine original
@@ -588,7 +599,7 @@ function buildWorking(){
   sctx.setTransform(1,0,0,1,0,0);
   proc.width=natW; proc.height=natH;
   view.width=natW; view.height=natH;
-  wrap.style.width=natW+'px';
+  fitView();
 }
 
 function enterPrep(fresh){
@@ -603,15 +614,16 @@ function enterPrep(fresh){
   wrap.classList.add('prepmode');
   $('prepLayer').hidden=false; $('prepTools').hidden=false; $('tools').hidden=true;
   ['detect','save','clear','cropbtn'].forEach(id=>$(id).disabled=true);
-  drawPrep();
+  /* before drawPrep, so the footer is already its final height when the gel
+     is fitted — a longer status line steals a row from the image           */
   setStatus('Drag the frame to crop. Straighten with the slider, or draw a level line along the wells.');
+  drawPrep();
 }
 
 function drawPrep(){
   const a=totalAngle(), {RW,RH}=rotBox(origW,origH,a);
   const ps=Math.min(1, 1700/Math.max(RW,RH));
   view.width=Math.max(1,Math.round(RW*ps)); view.height=Math.max(1,Math.round(RH*ps));
-  wrap.style.width=view.width+'px';
   vctx.setTransform(1,0,0,1,0,0);
   vctx.fillStyle=borderCss(); vctx.fillRect(0,0,view.width,view.height);
   vctx.translate(view.width/2, view.height/2);
@@ -621,12 +633,15 @@ function drawPrep(){
   vctx.drawImage(orig,-origW/2,-origH/2);
   vctx.setTransform(1,0,0,1,0,0);
   $('angpt').textContent=(prep.fine>=0?'+':'')+prep.fine.toFixed(1)+'\u00b0';
-  placeCrop();
+  placeCrop();                                  // the frame must be in place before
+  fitView();                                    // fitting, so its handles are measured
 }
 function placeCrop(){
-  const b=$('cropBox'), c=prep.crop;
-  b.style.left=(c.x*100)+'%'; b.style.top=(c.y*100)+'%';
-  b.style.width=(c.w*100)+'%'; b.style.height=(c.h*100)+'%';
+  const c=prep.crop;
+  [$('cropBox'), $('scrim')].forEach(b=>{
+    b.style.left=(c.x*100)+'%'; b.style.top=(c.y*100)+'%';
+    b.style.width=(c.w*100)+'%'; b.style.height=(c.h*100)+'%';
+  });
   const {RW,RH}=rotBox(origW,origH,totalAngle());
   $('prepInfo').textContent=`${Math.round(c.w*RW)} \u00d7 ${Math.round(c.h*RH)} px`;
 }
@@ -652,6 +667,7 @@ function applyPrep(){
   wrap.classList.remove('prepmode');
   $('prepLayer').hidden=true; $('prepTools').hidden=true; $('tools').hidden=false;
   ['detect','save','clear','cropbtn'].forEach(id=>$(id).disabled=false);
+  fitView(); rescale();                         // the swapped toolbar is a different height
   showFormat();
   if(!labels.length) findWells();
   else{ labels.forEach(l=>{ place(l); paint(l); }); setStatus('Crop updated — labels moved with the gel.'); }
@@ -669,6 +685,7 @@ $('lineBtn').onclick=()=>{
   prep.line=!prep.line;
   $('lineBtn').classList.toggle('on',prep.line);
   $('cropBox').classList.toggle('hidden',prep.line);
+  $('scrim').classList.toggle('hidden',prep.line);
   setStatus(prep.line ? 'Drag along an edge that should be level — the well row works well.'
                       : 'Drag the frame to crop.');
 };
@@ -901,12 +918,39 @@ $('bw').onclick  = ()=>{ bw=!bw;  $('bw').classList.toggle('on',bw);   applyFx()
 $('inv').onclick = ()=>{ inv=!inv; $('inv').classList.toggle('on',inv); applyFx(); };
 
 /* -------------------------------------------------------------- scale */
+/* Sizes the gel so the whole of it is on screen: the canvas is laid out at
+   the wrap's width, so fitting means picking the width whose matching height
+   still clears the toolbar under the image. Never enlarged past 1:1.       */
+let fitting=false;
+function fitView(){
+  if(!hasImage || fitting) return;
+  fitting=true;
+  try{ measureFit(); } finally{ fitting=false; }
+}
+function measureFit(){
+  const cs=getComputedStyle(mainEl);
+  const availW=mainEl.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight);
+  const vw=view.width||1, vh=view.height||1;
+  let w=Math.min(vw, availW);
+  /* "Does it still scroll?" is the real question, and asking the scroller
+     itself folds in the toolbar's rewrapping, the crop handles' overhang and
+     sub-pixel rounding that measuring the pieces separately would miss.     */
+  for(let i=0;i<8;i++){
+    wrap.style.width=Math.floor(w)+'px';
+    const over=mainEl.scrollHeight-mainEl.clientHeight;
+    if(over<=0) break;
+    w=Math.max(120, w-Math.max(1, over*vw/vh));
+  }
+}
 function rescale(){
   if(!hasImage) return;
   wrap.style.setProperty('--sc', (view.clientWidth/natW) || 1);
   labels.forEach(place);
 }
 new ResizeObserver(rescale).observe(view);
+/* the window, and the footer rewrapping under a long status line, both change
+   how much room the gel has — refit whenever that box actually resizes.     */
+new ResizeObserver(()=>{ fitView(); rescale(); }).observe(mainEl);
 
 /* ------------------------------------------------------------- labels */
 /* A label is anchored at (cx, y). For rot 0 that point is the top centre of
