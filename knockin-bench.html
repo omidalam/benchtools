@@ -1,0 +1,2415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Knock-in Bench</title>
+<style>
+/* BenchTools house palette — single dark theme, no webfonts, no network. */
+:root{
+  --paper:#0c0e12; --surface:#1b2027; --sunk:#161b21;
+  --ink:#dfe4ea; --body:#c4ccd6; --muted:#8e99a8; --faint:#6b7685;
+  --line:#2c333d; --line-soft:#232a33;
+  --accent:#ff9d3d; --accent-soft:#3a2510; --accent-line:#8a5320;
+  --arm:#5aa9e0; --arm-soft:#15242f;
+  --mark:#c9a2f0; --mark-soft:#261c36;
+  --ok:#4fc98a; --ok-soft:#12261c;
+  --warn:#e5b567; --warn-soft:#2d2413;
+  --bad:#ff4d4d; --bad-soft:#331617;
+  --nt-a:#5fbe86; --nt-c:#66aee8; --nt-g:#d4a459; --nt-t:#ee8078; --nt-n:#6b7685;
+  --focus:#ff9d3d;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 22px -14px rgba(0,0,0,.7);
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+  --r:6px;
+  color-scheme:dark;
+}
+img{max-width:100%}
+[hidden]{display:none!important}
+
+*{box-sizing:border-box}
+html,body{background:var(--paper)}
+body{
+  margin:0; font-family:var(--sans); color:var(--body);
+  font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased;
+}
+:focus-visible{outline:2px solid var(--focus); outline-offset:2px; border-radius:3px}
+h1,h2,h3{color:var(--ink); margin:0; text-wrap:balance; font-weight:600; letter-spacing:-.011em}
+
+.wrap{max-width:1180px; margin:0 auto; padding-inline:18px}
+
+/* ---------- header ---------- */
+.topbar{
+  position:sticky; top:env(safe-area-inset-top, 0px); z-index:40;
+  background:color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--line);
+}
+.topbar .wrap{display:flex; align-items:center; gap:14px; padding-block:11px; flex-wrap:wrap}
+.brand{display:flex; align-items:baseline; gap:9px; margin-right:auto}
+.brand b{font-size:16px; font-weight:600; color:var(--ink); letter-spacing:-.02em}
+.brand span{font-family:var(--mono); font-size:10.5px; color:var(--faint); letter-spacing:.04em}
+.tnav{display:flex; gap:2px}
+.tnav a{
+  font-size:12.5px; color:var(--muted); text-decoration:none; padding:5px 9px;
+  border-radius:5px; font-weight:500;
+}
+.tnav a:hover{background:var(--sunk); color:var(--ink)}
+
+/* ---------- controls ---------- */
+button{font:inherit; cursor:pointer}
+.btn{
+  border:1px solid var(--line); background:var(--surface); color:var(--body);
+  padding:6px 11px; border-radius:6px; font-size:12.5px; font-weight:500;
+  display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+  transition:background .12s, border-color .12s;
+}
+.btn:hover{background:var(--sunk); border-color:var(--muted)}
+.btn[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#1a1205}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+.btn.primary:hover{filter:brightness(1.08); background:var(--accent)}
+.btn:disabled{opacity:.45; cursor:default}
+.seg{display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:var(--surface)}
+.seg button{
+  border:0; background:transparent; color:var(--muted); padding:5px 10px;
+  font-size:12px; font-weight:500; border-right:1px solid var(--line);
+}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent); color:#1a1205; font-weight:600}
+
+label.lbl, .lbl{
+  display:block; font-size:10.5px; font-weight:600; letter-spacing:.075em;
+  text-transform:uppercase; color:var(--faint); margin-bottom:6px;
+}
+textarea, input[type=text], input[type=number], select{
+  width:100%; font-family:var(--mono); font-size:12.5px; line-height:1.65;
+  color:var(--ink); background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r); padding:9px 11px; resize:vertical;
+}
+textarea{white-space:pre-wrap; word-break:break-all; min-height:120px}
+input[type=number]{width:88px}
+select{font-family:var(--sans); font-size:12.5px; padding:6px 9px; width:auto}
+
+/* ---------- layout ---------- */
+section{padding-block:28px 6px}
+.shead{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:16px}
+.snum{
+  font-family:var(--mono); font-size:11px; font-weight:500; color:var(--accent);
+  border:1px solid var(--accent-line); background:var(--accent-soft);
+  padding:2px 7px; border-radius:20px;
+}
+.shead h2{font-size:19px}
+.shead p{margin:0; font-size:13px; color:var(--muted); flex:1 1 260px; min-width:0}
+
+.card{background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow)}
+.card + .card{margin-top:14px}
+.pad{padding:16px}
+
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+.optrow{display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; margin-top:14px}
+.optrow > div{display:flex; flex-direction:column; gap:0}
+.hint{font-size:11.5px; color:var(--faint); margin:6px 0 0; font-family:var(--mono)}
+
+/* ---------- banner / status ---------- */
+.banner{
+  display:flex; gap:10px; align-items:flex-start; font-size:12.5px;
+  border-radius:8px; padding:10px 12px; border:1px solid;
+}
+.banner.info{background:var(--arm-soft); border-color:color-mix(in srgb, var(--arm) 35%, transparent); color:var(--body)}
+.banner.warn{background:var(--warn-soft); border-color:color-mix(in srgb, var(--warn) 40%, transparent); color:var(--body)}
+.banner.bad{background:var(--bad-soft); border-color:color-mix(in srgb, var(--bad) 40%, transparent); color:var(--body)}
+.banner strong{color:var(--ink)}
+.banner .btn{margin-left:auto; flex:none}
+
+/* ---------- stat chips ---------- */
+.chips{display:flex; flex-wrap:wrap; gap:0; border-top:1px solid var(--line-soft)}
+.chip{
+  flex:1 1 118px; padding:11px 14px; border-right:1px solid var(--line-soft);
+  border-bottom:1px solid var(--line-soft);
+}
+.chip:last-child{border-right:0}
+.chip dt{font-size:10px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:var(--faint)}
+.chip dd{
+  margin:3px 0 0; font-family:var(--mono); font-size:17px; font-weight:500; color:var(--ink);
+  font-variant-numeric:tabular-nums; letter-spacing:-.01em;
+}
+.chip dd small{font-size:11px; color:var(--muted); font-weight:400}
+
+/* ---------- edit map ---------- */
+.mapbox{padding:14px 16px 6px; overflow-x:auto}
+.mapbox svg{display:block; max-width:100%}
+.legend{
+  display:flex; flex-wrap:wrap; gap:14px; padding:0 16px 14px;
+  font-size:11.5px; color:var(--muted);
+}
+.legend i{display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:5px;
+  vertical-align:-1px; border:1px solid var(--line)}
+
+/* ---------- protein ---------- */
+.prot{padding:16px; border-top:1px solid var(--line-soft)}
+.protline{
+  font-family:var(--mono); font-size:13.5px; line-height:1.9; overflow-x:auto;
+  white-space:pre; padding-bottom:2px;
+}
+.protline .tag{font-weight:400; color:var(--muted)}
+.protline em{
+  font-style:normal; background:var(--accent-soft); color:var(--accent);
+  font-weight:600; padding:2px 1px; border-radius:2px;
+  box-shadow:inset 0 -1.5px 0 var(--accent);
+}
+.protline b{font-weight:600; color:var(--ink)}
+.protline s{text-decoration:none; color:var(--faint)}
+
+/* ---------- sequence dump ---------- */
+details.seqdump{border-top:1px solid var(--line-soft)}
+details.seqdump summary{
+  padding:11px 16px; cursor:pointer; font-size:12.5px; color:var(--muted);
+  font-weight:500; list-style:none; display:flex; align-items:center; gap:8px;
+}
+details.seqdump summary::-webkit-details-marker{display:none}
+details.seqdump summary::before{content:'▸'; color:var(--faint); font-size:10px}
+details.seqdump[open] summary::before{content:'▾'}
+.dump{
+  font-family:var(--mono); font-size:12px; line-height:1.75; padding:0 16px 16px;
+  white-space:pre-wrap; word-break:break-all; color:var(--body); overflow-x:auto;
+}
+.dump .u{color:var(--faint)}
+.dump .i{color:var(--accent); font-weight:600}
+.dump .a{color:var(--arm)}
+.dump .r{background:var(--mark-soft); color:var(--mark); font-weight:600}
+
+/* ---------- results table ---------- */
+.tbl{width:100%; border-collapse:collapse; font-size:12.5px}
+.tbl th{
+  text-align:left; font-size:10px; font-weight:600; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--faint); padding:10px 12px;
+  border-bottom:1px solid var(--line); white-space:nowrap;
+}
+.tbl td{padding:10px 12px; border-bottom:1px solid var(--line-soft); vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tr.sel td{background:var(--sunk)}
+.tbl .num{font-family:var(--mono); font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap}
+.tbl .name{font-family:var(--mono); font-weight:500; color:var(--ink)}
+.tbl .det{color:var(--muted); font-size:11.5px}
+.tblwrap{overflow-x:auto}
+.pill{
+  display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600;
+  padding:3px 9px; border-radius:20px; white-space:nowrap; border:1px solid transparent;
+}
+.pill::before{content:''; width:6px; height:6px; border-radius:50%; background:currentColor}
+.pill.ok{background:var(--ok-soft); color:var(--ok); border-color:color-mix(in srgb, var(--ok) 30%, transparent)}
+.pill.warn{background:var(--warn-soft); color:var(--warn); border-color:color-mix(in srgb, var(--warn) 30%, transparent)}
+.pill.bad{background:var(--bad-soft); color:var(--bad); border-color:color-mix(in srgb, var(--bad) 30%, transparent)}
+.pill.grey{background:var(--sunk); color:var(--muted); border-color:var(--line)}
+.strand{font-family:var(--mono); color:var(--muted)}
+.bar{
+  position:relative; height:5px; width:54px; background:var(--sunk);
+  border-radius:3px; overflow:hidden; margin-top:4px;
+}
+.bar i{position:absolute; inset:0 auto 0 0; background:var(--arm); border-radius:3px}
+
+/* ---------- alignment viewer ---------- */
+.alnhead{
+  display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  padding:12px 16px; border-bottom:1px solid var(--line-soft);
+}
+.alnhead .lbl{margin:0}
+.alnscroll{overflow-x:auto; padding:14px 16px 18px}
+.aln{font-family:var(--mono); font-size:12.5px; line-height:1.55; min-width:min-content}
+.blk{margin-bottom:18px}
+.blk:last-child{margin-bottom:0}
+.arow{display:flex; align-items:center; white-space:pre; height:1.55em}
+.arow .lab{
+  flex:none; width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:11px; color:var(--muted); padding-right:8px; text-align:right;
+  font-family:var(--sans);
+}
+.arow .co{flex:none; width:64px; padding-left:10px; font-size:10.5px; color:var(--faint);
+  font-variant-numeric:tabular-nums; text-align:left; font-family:var(--mono)}
+.arow .sq{flex:none; position:relative}
+.arow.refrow .sq{color:var(--ink); font-weight:500}
+.arow.refrow .lab{color:var(--ink); font-weight:600}
+.arow.ruler{height:1.35em; color:var(--faint)}
+.ribbon{height:9px; position:relative; margin:2px 0 3px; margin-left:104px}
+.ribbon .seg2{position:absolute; top:0; height:9px; border-radius:2px}
+.ribbon .lab2{
+  position:absolute; top:-1px; font-size:8.5px; font-weight:700; letter-spacing:.06em;
+  color:#fff; padding-left:3px; line-height:10px; white-space:nowrap; overflow:hidden;
+}
+.aln .m{color:var(--faint)}
+.aln .rc{color:var(--mark); font-weight:600; background:var(--mark-soft); border-radius:2px}
+.aln .x{color:var(--bad); font-weight:600; background:var(--bad-soft); border-radius:2px}
+.aln .d{color:var(--bad); background:var(--bad-soft); font-weight:600}
+.aln .u{color:var(--line)}
+.aln .A{color:var(--nt-a)} .aln .C{color:var(--nt-c)}
+.aln .G{color:var(--nt-g)} .aln .T{color:var(--nt-t)} .aln .N{color:var(--nt-n)}
+/* columns that exist only because a read carries extra bases */
+.aln .gr{color:var(--mark); background:var(--mark-soft); font-weight:600}
+.aln .iv{color:var(--mark); background:var(--mark-soft); font-weight:700}
+.aln .gp{color:var(--faint); background:var(--mark-soft)}
+/* clipped ends — shown for reference, never scored */
+.aln .ov{color:transparent}
+.aln .cl{color:var(--faint); background:var(--sunk)}
+.aln .cx{color:var(--bad); background:var(--sunk); opacity:.72}
+
+.alnkey{
+  display:flex; flex-wrap:wrap; gap:8px 18px; padding:11px 16px;
+  border-top:1px solid var(--line-soft); font-size:11.5px; color:var(--muted);
+}
+.alnkey b{font-family:var(--mono); font-weight:700; padding:1px 4px; border-radius:2px; margin-right:5px}
+.alnkey .k-m{color:var(--faint); background:var(--sunk)}
+.alnkey .k-x{color:var(--bad); background:var(--bad-soft)}
+.alnkey .k-d{color:var(--bad); background:var(--bad-soft)}
+.alnkey .k-i{color:var(--mark); background:var(--mark-soft)}
+.alnkey .k-r{color:var(--mark); background:var(--mark-soft)}
+.alnkey .k-c{color:var(--faint); background:var(--sunk)}
+
+.empty{padding:34px 16px; text-align:center; color:var(--muted); font-size:13px}
+.empty b{display:block; color:var(--ink); font-size:14px; margin-bottom:4px}
+
+/* ---------- drawer ---------- */
+.scrim{position:fixed; inset:0; background:rgba(10,16,22,.42); z-index:50}
+.drawer{
+  position:fixed; top:0; right:0; bottom:0; width:min(400px, 92vw); z-index:51;
+  background:var(--surface); border-left:1px solid var(--line);
+  display:flex; flex-direction:column; box-shadow:-14px 0 40px -20px rgba(0,0,0,.45);
+}
+.drawer header{
+  display:flex; align-items:center; gap:10px; padding:14px 16px;
+  border-bottom:1px solid var(--line);
+}
+.drawer header h3{font-size:15px; margin-right:auto}
+.drawer .body{overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px}
+.proj{
+  border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+  display:flex; gap:10px; align-items:center;
+}
+.proj .meta{min-width:0; flex:1}
+.proj .meta b{display:block; color:var(--ink); font-size:13px; font-weight:600;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.proj .meta span{font-family:var(--mono); font-size:10.5px; color:var(--faint)}
+.iconbtn{
+  border:1px solid transparent; background:transparent; color:var(--muted);
+  border-radius:5px; padding:4px 7px; font-size:12px;
+}
+.iconbtn:hover{background:var(--sunk); color:var(--ink)}
+.iconbtn.danger:hover{background:var(--bad-soft); color:var(--bad)}
+
+footer{
+  margin-top:34px; border-top:1px solid var(--line); padding-block:18px 28px;
+  font-size:11.5px; color:var(--faint); line-height:1.7;
+}
+footer code{font-family:var(--mono); font-size:11px; color:var(--muted)}
+
+.toast{
+  position:fixed; left:50%; transform:translateX(-50%); bottom:calc(20px + env(safe-area-inset-bottom, 0px));
+  background:var(--ink); color:var(--paper); font-size:12.5px; font-weight:500;
+  padding:9px 16px; border-radius:20px; z-index:60; box-shadow:var(--shadow);
+}
+.pngbox{padding:16px; border-top:1px solid var(--line-soft)}
+.pngbox img{border:1px solid var(--line); border-radius:6px; background:#fff}
+
+/* ---------- BenchTools chrome ---------- */
+.bt-head{background:var(--surface); border-bottom:1px solid var(--line); padding:14px 0}
+.bt-brand{
+  font-family:var(--mono); font-size:13px; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--accent); text-decoration:none; display:inline-block;
+}
+.bt-brand span{color:var(--muted)}
+.bt-brand:hover span{color:var(--ink)}
+.bt-foot{
+  background:var(--surface); border-top:1px solid var(--line); margin-top:40px;
+  padding:12px 18px; font-family:var(--mono); font-size:11px; color:var(--muted);
+  display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap;
+}
+.bt-foot a{color:var(--accent); text-decoration:none}
+.bt-foot a:hover{text-decoration:underline}
+.topbar .brand b{font-family:var(--mono); letter-spacing:.06em}
+
+@media (max-width:760px){
+  .grid2{grid-template-columns:1fr}
+  .chip{flex-basis:50%}
+  .tnav{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important; animation:none !important}}
+
+@page{ size:A4 portrait; margin:13mm }
+@media print{
+  :root{
+    --paper:#fff; --surface:#fff; --sunk:#F1F4F7;
+    --ink:#131C25; --body:#31404E; --muted:#61707E; --faint:#8C9AA7;
+    --line:#D6DDE4; --line-soft:#E6EBF0;
+    --accent:#AE1F59; --accent-soft:#FBE8EF; --accent-line:#E8A6C0;
+    --arm:#2A6B99; --arm-soft:#E2EEF7;
+    --ok:#276E49; --ok-soft:#E0F0E7; --warn:#8E6208; --warn-soft:#F8EDD8;
+    --mark:#6B46A8; --mark-soft:#EFE7F8;
+    --bad:#A62F24; --bad-soft:#FAE4E1;
+    --nt-a:#2B7C50; --nt-c:#1F62A2; --nt-g:#96601A; --nt-t:#A83A33; --nt-n:#8C9AA7;
+    --shadow:none;
+  }
+  html,body{background:#fff}
+  *{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+  .topbar, .tnav, .bt-head, .bt-foot, .scrim, .drawer, .toast, .legend,
+  #btnFile, #btnClear, .alnhead .seg, .alnhead .btn, .alnhead .lbl,
+  details.seqdump summary{ display:none !important }
+  .wrap{max-width:none; padding-inline:0}
+  section{padding-block:10px 0; break-inside:auto}
+  .shead p{display:none}
+  .card{box-shadow:none; break-inside:avoid}
+  .alnhead{display:none}
+  .alnscroll, .tblwrap, .mapbox, .protline, .dump{overflow:visible !important}
+  .blk{break-inside:avoid}
+  .aln{font-size:9px}
+  .arow{height:1.45em}
+  details.seqdump{display:block}
+  details.seqdump .dump{display:block !important}
+  textarea{border:0; padding:0; resize:none; overflow:hidden !important; font-size:9px; line-height:1.5}
+  .card.pad{padding:10px 0}
+  .optrow{display:none}
+  footer{margin-top:12px}
+}
+</style>
+
+<header class="bt-head">
+  <div class="wrap">
+    <a class="bt-brand" href="index.html">Bench&nbsp;Tools <span>/ lab utilities</span></a>
+  </div>
+</header>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand"><b>Knock-in Bench</b><span>ssODN · HDR · Sanger</span></div>
+    <nav class="tnav">
+      <a href="#design">Design</a>
+      <a href="#clones">Clones</a>
+      <a href="#alignment">Alignment</a>
+    </nav>
+    <button class="btn primary" id="btnPdf" type="button">Export PDF</button>
+    <button class="btn" id="btnProjects" type="button">Projects</button>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <section id="design">
+    <div class="shead">
+      <span class="snum">1</span>
+      <h2>Design the edit</h2>
+      <p>Paste the locus and the repair oligo &mdash; plain sequence, FASTA or a GenBank record. Coding bases are the uppercase ones; a GenBank CDS feature sets the case for you. The predicted HDR allele is rebuilt from the oligo's own homology arms, so any silent recoding you designed in comes along with it.</p>
+    </div>
+
+    <div id="exampleBanner" class="banner info" style="margin-bottom:14px">
+      <span>Loaded with a <strong>synthetic example</strong>: a C-terminal 3&times;FLAG knock-in with a GSGS linker and one silent PAM mutation. Not real sequence &mdash; replace it with yours.</span>
+      <button class="btn" id="btnClear" type="button">Clear</button>
+    </div>
+
+    <div class="card pad">
+      <div class="grid2">
+        <div>
+          <label class="lbl" for="gene">Gene / locus sequence</label>
+          <textarea id="gene" spellcheck="false" rows="7" placeholder="Paste plain sequence, FASTA, or a GenBank record. Uppercase = coding, lowercase = UTR/intron."></textarea>
+          <p class="hint" id="geneHint">&mdash;</p>
+        </div>
+        <div>
+          <label class="lbl" for="oligo">Repair oligo (ssODN)</label>
+          <textarea id="oligo" spellcheck="false" rows="7" placeholder="Paste the donor. Either strand — orientation is detected."></textarea>
+          <p class="hint" id="oligoHint">&mdash;</p>
+        </div>
+      </div>
+
+      <div class="optrow">
+        <div>
+          <span class="lbl">Coding sequence</span>
+          <div class="seg" role="group" aria-label="How to find the CDS">
+            <button type="button" data-cds="case" aria-pressed="true">Case convention</button>
+            <button type="button" data-cds="orf" aria-pressed="false">Longest ORF</button>
+            <button type="button" data-cds="manual" aria-pressed="false">By hand</button>
+          </div>
+        </div>
+        <div id="manualBox" hidden>
+          <span class="lbl">CDS start / end (1-based)</span>
+          <div style="display:flex; gap:6px">
+            <input type="number" id="cdsStart" min="1" step="1" aria-label="CDS start">
+            <input type="number" id="cdsEnd" min="1" step="1" aria-label="CDS end">
+          </div>
+        </div>
+        <div>
+          <span class="lbl">Tag terminus</span>
+          <div class="seg" role="group" aria-label="Which terminus is tagged">
+            <button type="button" data-term="N" aria-pressed="false">N-terminal</button>
+            <button type="button" data-term="C" aria-pressed="true">C-terminal</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="buildOut"></div>
+  </section>
+
+  <section id="clones">
+    <div class="shead">
+      <span class="snum">2</span>
+      <h2>Check your clones</h2>
+      <p>Drop in Sanger reads as FASTA. Each trace is oriented, its ragged ends clipped, and aligned to the predicted allele &mdash; and to the unedited gene, so a wild-type clone is called as one rather than as a big deletion.</p>
+    </div>
+
+    <div class="card pad">
+      <label class="lbl" for="reads">Sequencing results (FASTA)</label>
+      <textarea id="reads" spellcheck="false" rows="7" placeholder="&gt;clone_A1&#10;NNGTCAGGATC..."></textarea>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px">
+        <button class="btn" id="btnFile" type="button">Add .fa / .seq / .txt file</button>
+        <input type="file" id="fileIn" accept=".fa,.fasta,.fas,.fna,.seq,.txt,.ab1.fa,text/plain" multiple hidden>
+        <span class="hint" id="readHint" style="margin:0">&mdash;</span>
+      </div>
+    </div>
+
+    <div id="resultsOut"></div>
+  </section>
+
+  <section id="alignment">
+    <div class="shead">
+      <span class="snum">3</span>
+      <h2>Alignment</h2>
+      <p>The predicted allele on top, clones below. Homology arms, insert and designed recoding are marked on the reference; only differences are drawn on the reads unless you ask for every base. Where a clone carries extra bases, the reference opens a gap so you can read straight down and see exactly what was inserted.</p>
+    </div>
+    <div class="card" id="alnCard">
+      <div class="empty"><b>Nothing aligned yet</b>Build an edit and paste some reads.</div>
+    </div>
+  </section>
+
+  <footer class="wrap">
+    Predicted allele = the oligo replacing the genomic stretch its arms span, which is the HDR outcome when both arms cross over.
+    Reads are placed by 11-mer seeding and a local affine alignment (<code>match +2 / mismatch &minus;4 / gap &minus;10,&minus;1</code>);
+    <code>N</code> scores 0, so a noisy leading stretch neither matches nor penalises. Status calls are heuristics from a single consensus sequence &mdash;
+    a heterozygote's double peaks live in the trace, not in the FASTA, so confirm mixed clones on the chromatogram.
+  </footer>
+</main>
+
+<footer class="bt-foot">
+  <div>BenchTools &middot; runs entirely in your browser</div>
+  <div><a href="https://github.com/omidalam/BenchTools">Source on GitHub</a></div>
+</footer>
+
+<script>
+/* ============================================================
+   seqcore — reference building + read alignment
+   ============================================================ */
+const COMP = { A:'T',C:'G',G:'C',T:'A',U:'A',N:'N',
+  R:'Y',Y:'R',S:'S',W:'W',K:'M',M:'K',B:'V',V:'B',D:'H',H:'D',
+  a:'t',c:'g',g:'c',t:'a',u:'a',n:'n',
+  r:'y',y:'r',s:'s',w:'w',k:'m',m:'k',b:'v',v:'b',d:'h',h:'d' };
+
+function rc(s){ let o=''; for(let i=s.length-1;i>=0;i--) o += (COMP[s[i]] || 'N'); return o; }
+function cleanSeq(s){ return (s||'').replace(/[^A-Za-z]/g,''); }
+
+function parseFasta(text){
+  const out=[]; if(!text) return out;
+  let cur=null, auto=0;
+  for(const raw of text.split(/\r?\n/)){
+    const line=raw.trim(); if(!line) continue;
+    if(line[0]==='>'||line[0]===';'){
+      if(cur) out.push(cur);
+      const h=line.slice(1).trim(), sp=h.search(/\s/);
+      cur={ id: sp<0?h:h.slice(0,sp), desc: sp<0?'':h.slice(sp+1).trim(), seq:'' };
+      if(!cur.id) cur.id='read_'+(++auto);
+    } else if(cur){ cur.seq += cleanSeq(line); }
+    else { cur={ id:'pasted_sequence', desc:'', seq: cleanSeq(line) }; }
+  }
+  if(cur) out.push(cur);
+  return out.filter(r=>r.seq.length);
+}
+
+/* ---------- pasted-format handling: FASTA and GenBank ---------- */
+
+/* Parse a GenBank location: complement(join(1..10,20..30)) and friends. */
+function parseLoc(locRaw){
+  let s=(locRaw||'').replace(/\s+/g,''), comp=false;
+  if(/^complement\(/i.test(s)){ comp=true; s=s.slice(11,-1); }
+  if(/^(join|order)\(/i.test(s)) s=s.replace(/^(join|order)\(/i,'').replace(/\)$/,'');
+  const parts=[];
+  s.split(',').forEach(p=>{
+    let q=p;
+    if(/^complement\(/i.test(q)){ comp=true; q=q.slice(11).replace(/\)$/,''); }
+    const m=q.match(/^[<>]?(\d+)(?:\.\.[<>]?(\d+))?/);
+    if(m){ const a=+m[1], b=m[2]?+m[2]:a; if(b>=a) parts.push({start:a-1, end:b}); }
+  });
+  parts.sort((a,b)=>a.start-b.start);
+  return { comp, parts };
+}
+function locSpan(l){ return l.parts.reduce((n,p)=>n+(p.end-p.start),0); }
+
+function parseGenBank(text){
+  const lines=text.split(/\r?\n/);
+  let inFeat=false, inOrigin=false, seq='', cur=null, name='';
+  const feats=[];
+  const open=s=>{ let n=0; for(const c of s){ if(c==='(') n++; else if(c===')') n--; } return n>0; };
+  for(const line of lines){
+    if(/^ORIGIN/i.test(line)){ inOrigin=true; inFeat=false; continue; }
+    if(/^\/\//.test(line)){ inOrigin=false; inFeat=false; continue; }
+    if(inOrigin){ seq += line.replace(/[^A-Za-z]/g,''); continue; }
+    if(/^LOCUS\s/i.test(line)){ const m=line.match(/^LOCUS\s+(\S+)/i); if(m) name=m[1]; continue; }
+    if(/^FEATURES/i.test(line)){ inFeat=true; cur=null; continue; }
+    if(/^\S/.test(line)){ inFeat=false; cur=null; continue; }
+    if(!inFeat) continue;
+    const m=line.match(/^ {2,7}(\S+)\s+(\S.*)$/);
+    if(m){ cur={ key:m[1], loc:m[2].trim() }; feats.push(cur); continue; }
+    if(cur && open(cur.loc) && !/^\s*\//.test(line)) cur.loc += line.trim();
+  }
+  if(!seq) return null;
+
+  const cds=feats.filter(f=>/^CDS$/i.test(f.key)).map(f=>({f, l:parseLoc(f.loc)}))
+    .filter(x=>x.l.parts.length).sort((a,b)=>locSpan(b.l)-locSpan(a.l));
+  const exons=feats.filter(f=>/^(exon|mRNA)$/i.test(f.key)).map(f=>({f, l:parseLoc(f.loc)}))
+    .filter(x=>x.l.parts.length).sort((a,b)=>locSpan(b.l)-locSpan(a.l));
+  const chosen = cds[0] || exons[0] || null;
+
+  let s=seq.toLowerCase(), L=s.length, note, flipped=false;
+  if(!chosen){
+    return { seq:s, format:'GenBank',
+      note:(name?name+' · ':'')+L+' nt · no CDS feature found, falling back to the longest ORF',
+      autoCase:false };
+  }
+  let parts=chosen.l.parts;
+  if(chosen.l.comp){
+    s=rc(s); flipped=true;
+    parts=parts.map(p=>({ start:L-p.end, end:L-p.start })).sort((a,b)=>a.start-b.start);
+  }
+  const arr=s.split('');
+  let coded=0;
+  parts.forEach(p=>{ for(let i=Math.max(0,p.start); i<Math.min(L,p.end); i++){ arr[i]=arr[i].toUpperCase(); coded++; } });
+  const kind = cds[0] ? 'CDS' : chosen.f.key;
+  note = (name? name+' · ':'') + L + ' nt · ' + kind + ' ' +
+    (parts.length>1 ? parts.length+' exons, ' : '') + coded + ' nt uppercased' +
+    (flipped ? ' · reverse-complemented so the CDS reads forward' : '');
+  return { seq:arr.join(''), format:'GenBank', note, autoCase:true };
+}
+
+/* Detect FASTA / GenBank in a textarea and return a plain sequence, or null. */
+function normalizeInput(raw, annotate){
+  const text=raw||'';
+  if(!text.trim()) return null;
+  if(/^\s*(LOCUS|ORIGIN)\b/im.test(text) && /^ORIGIN/im.test(text)){
+    const g=parseGenBank(text);
+    if(g) return annotate ? g : { seq:g.seq, format:'GenBank', note:g.note, autoCase:false };
+  }
+  if(/^\s*>/.test(text)){
+    const recs=parseFasta(text);
+    if(recs.length){
+      const seq=recs.map(r=>r.seq).join('');
+      return { seq, format:'FASTA', autoCase:false,
+        note: recs[0].id + (recs.length>1 ? ' +'+(recs.length-1)+' more' : '') + ' · ' + seq.length + ' nt' };
+    }
+  }
+  return null;
+}
+
+const CODONS={TTT:'F',TTC:'F',TTA:'L',TTG:'L',CTT:'L',CTC:'L',CTA:'L',CTG:'L',
+ATT:'I',ATC:'I',ATA:'I',ATG:'M',GTT:'V',GTC:'V',GTA:'V',GTG:'V',
+TCT:'S',TCC:'S',TCA:'S',TCG:'S',CCT:'P',CCC:'P',CCA:'P',CCG:'P',
+ACT:'T',ACC:'T',ACA:'T',ACG:'T',GCT:'A',GCC:'A',GCA:'A',GCG:'A',
+TAT:'Y',TAC:'Y',TAA:'*',TAG:'*',CAT:'H',CAC:'H',CAA:'Q',CAG:'Q',
+AAT:'N',AAC:'N',AAA:'K',AAG:'K',GAT:'D',GAC:'D',GAA:'E',GAG:'E',
+TGT:'C',TGC:'C',TGA:'*',TGG:'W',CGT:'R',CGC:'R',CGA:'R',CGG:'R',
+AGT:'S',AGC:'S',AGA:'R',AGG:'R',GGT:'G',GGC:'G',GGA:'G',GGG:'G'};
+function translate(nt){ const s=nt.toUpperCase(); let p='';
+  for(let i=0;i+2<s.length;i+=3) p += (CODONS[s.substr(i,3)]||'X'); return p; }
+
+function bestUngapped(ref, probe, minPos){
+  const n=ref.length, k=probe.length; let best=-1, bestPos=-1;
+  for(let i=Math.max(0,minPos|0); i+k<=n; i++){
+    let m=0; for(let j=0;j<k;j++) if(ref.charCodeAt(i+j)===probe.charCodeAt(j)) m++;
+    if(m>best){ best=m; bestPos=i; if(m===k) break; }
+  }
+  return {pos:bestPos, matches:best, k};
+}
+
+function anchorOne(geneU, oligoU){
+  const L=oligoU.length, k=Math.max(12, Math.min(30, Math.floor(L/4)));
+  if(L < 2*k+1 || geneU.length < k) return null;
+  const head=bestUngapped(geneU, oligoU.slice(0,k), 0);
+  const tail=bestUngapped(geneU, oligoU.slice(L-k), head.pos+k);
+  if(head.pos<0 || tail.pos<0) return null;
+  return { k, gStart:head.pos, gEnd:tail.pos+k,
+    headId:head.matches/k, tailId:tail.matches/k, score:head.matches+tail.matches };
+}
+
+function affineAlign(q, r, opt){
+  const o=opt||{};
+  const MATCH=o.match==null?2:o.match, MIS=o.mismatch==null?-4:o.mismatch;
+  const GO=o.gapOpen==null?-10:o.gapOpen, GE=o.gapExtend==null?-1:o.gapExtend;
+  const local=o.mode==='local';
+  const n=q.length, m=r.length, W=m+1, NEG=-1e8;
+  const sub=(a,b)=>(a==='N'||b==='N')?0:(a===b?MATCH:MIS);
+  const tM=new Uint8Array((n+1)*W), tX=new Uint8Array((n+1)*W), tY=new Uint8Array((n+1)*W);
+  let pM=new Int32Array(W), pX=new Int32Array(W), pY=new Int32Array(W);
+  let cM=new Int32Array(W), cX=new Int32Array(W), cY=new Int32Array(W);
+  let bestScore=local?0:NEG, bi=0, bj=0, bMat=1;
+  pM[0]=0; pX[0]=NEG; pY[0]=NEG;
+  for(let j=1;j<=m;j++){ pM[j]=NEG; pX[j]=NEG; pY[j]=local?0:(GO+j*GE); tY[j]=local?0:(j===1?1:3); }
+  for(let i=1;i<=n;i++){
+    const qi=q[i-1], base=i*W;
+    cM[0]=NEG; cY[0]=NEG; cX[0]=local?0:(GO+i*GE); tX[base]=local?0:(i===1?1:2);
+    for(let j=1;j<=m;j++){
+      const idx=base+j, s=sub(qi, r[j-1]);
+      let bm=pM[j-1], bt=1;
+      if(pX[j-1]>bm){ bm=pX[j-1]; bt=2; }
+      if(pY[j-1]>bm){ bm=pY[j-1]; bt=3; }
+      let v=bm+s;
+      if(local && v<0){ v=0; bt=0; }
+      cM[j]=v; tM[idx]=bt;
+      const xo=pM[j]+GO+GE, xe=pX[j]+GE;
+      if(xo>=xe){ cX[j]=xo; tX[idx]=1; } else { cX[j]=xe; tX[idx]=2; }
+      const yo=cM[j-1]+GO+GE, ye=cY[j-1]+GE;
+      if(yo>=ye){ cY[j]=yo; tY[idx]=1; } else { cY[j]=ye; tY[idx]=3; }
+      if(local && v>bestScore){ bestScore=v; bi=i; bj=j; bMat=1; }
+    }
+    let t; t=pM;pM=cM;cM=t; t=pX;pX=cX;cX=t; t=pY;pY=cY;cY=t;
+  }
+  if(!local){
+    bestScore=pM[m]; bi=n; bj=m; bMat=1;
+    if(pX[m]>bestScore){ bestScore=pX[m]; bMat=2; }
+    if(pY[m]>bestScore){ bestScore=pY[m]; bMat=3; }
+  }
+  let i=bi, j=bj, mat=bMat; const qa=[], ra=[];
+  while(i>0 || j>0){
+    const idx=i*W+j;
+    if(mat===1){
+      if(local && tM[idx]===0) break;
+      qa.push(q[i-1]); ra.push(r[j-1]);
+      const nx=tM[idx]; i--; j--; mat=nx||1;
+      if(i===0 && j===0) break;
+      if(local && i===0) break;
+    } else if(mat===2){
+      qa.push(q[i-1]); ra.push('-');
+      const nx=tX[idx]; i--; mat=nx||1;
+      if(local && i===0) break;
+    } else {
+      qa.push('-'); ra.push(r[j-1]);
+      const nx=tY[idx]; j--; mat=nx||1;
+      if(local && j===0) break;
+    }
+    if(i<0||j<0) break;
+    if(!local && i===0 && j===0) break;
+  }
+  qa.reverse(); ra.reverse();
+  return { score:bestScore, qAln:qa.join(''), rAln:ra.join(''),
+    qStart:i, qEnd:bi, rStart:j, rEnd:bj };
+}
+
+function resolveCDS(gene, mode, manual){
+  const n=gene.length, coding=new Uint8Array(n);
+  if(mode==='case'){
+    let any=false;
+    for(let i=0;i<n;i++){ const c=gene[i]; if(c>='A'&&c<='Z'){ coding[i]=1; any=true; } }
+    if(any){
+      let s=coding.indexOf(1), e=n-1; while(e>=0 && !coding[e]) e--;
+      return { coding, start:s, end:e+1, mode:'case',
+        note:'Uppercase read as coding, lowercase as UTR or intron.' };
+    }
+  }
+  if(mode==='manual' && manual && manual.start>0 && manual.end>manual.start){
+    const s=Math.max(0,manual.start-1), e=Math.min(n,manual.end);
+    for(let i=s;i<e;i++) coding[i]=1;
+    return { coding, start:s, end:e, mode:'manual', note:'CDS set by hand.' };
+  }
+  let bs=-1, be=-1; const up=gene.toUpperCase();
+  for(let f=0;f<3;f++){
+    let start=-1;
+    for(let i=f;i+2<n;i+=3){
+      const cod=up.substr(i,3);
+      if(start<0){ if(cod==='ATG') start=i; }
+      else if(cod==='TAA'||cod==='TAG'||cod==='TGA'){
+        if(i+3-start > be-bs){ bs=start; be=i+3; } start=-1;
+      }
+    }
+  }
+  if(bs<0){ bs=0; be=n-(n%3); }
+  for(let i=bs;i<be;i++) coding[i]=1;
+  return { coding, start:bs, end:be, mode:'orf', note:'Longest ATG-to-stop ORF on the given strand.' };
+}
+
+function terminusSite(cds, terminus){
+  if(!cds || cds.start<0) return null;
+  return terminus==='N' ? cds.start+3 : cds.end-3;
+}
+
+function buildEdit(geneRaw, oligoRaw, cdsMode, manualCds, terminus){
+  const gene=cleanSeq(geneRaw), oligoIn=cleanSeq(oligoRaw);
+  const out={ gene, warnings:[], ok:false };
+  if(gene.length<40){ out.error='Paste a gene sequence of at least 40 bases.'; return out; }
+  const cds=resolveCDS(gene, cdsMode, manualCds);
+  out.cds=cds; out.site=terminusSite(cds, terminus); out.terminus=terminus;
+  if(!oligoIn.length){ out.error='Paste the repair oligo.'; return out; }
+  if(oligoIn.length<40){ out.error='Repair oligo is too short to carry homology arms.'; return out; }
+
+  const geneU=gene.toUpperCase();
+  const fwd=anchorOne(geneU, oligoIn.toUpperCase());
+  const rev=anchorOne(geneU, rc(oligoIn.toUpperCase()));
+  let pick=null, oligo=oligoIn, strand='+';
+  const fs=fwd?fwd.score:-1, rs=rev?rev.score:-1;
+  if(fs>=rs && fwd){ pick=fwd; oligo=oligoIn; strand='+'; }
+  else if(rev){ pick=rev; oligo=rc(oligoIn); strand='−'; }
+  if(!pick){ out.error='Could not place the oligo on the gene. Check that both sequences come from the same locus.'; return out; }
+  if(pick.headId<0.7 || pick.tailId<0.7){
+    out.error='Homology arms do not match the gene (best arm identity '+
+      Math.round(Math.min(pick.headId,pick.tailId)*100)+'%). Check the sequences.';
+    return out;
+  }
+
+  const gStart=pick.gStart, gEnd=pick.gEnd;
+  const seg=geneU.slice(gStart,gEnd);
+  const aln=affineAlign(oligo.toUpperCase(), seg, { mode:'global', gapOpen:-12, gapExtend:-1 });
+
+  let oi=0, ri=0; const runs=[]; let pend=null;
+  for(let c=0;c<aln.qAln.length;c++){
+    const a=aln.qAln[c], b=aln.rAln[c];
+    let type=null;
+    if(a==='-') type='del'; else if(b==='-') type='ins'; else if(a!==b) type='sub';
+    if(type){
+      if(pend && pend.type===type && pend.oEnd===oi && pend.gEnd===ri){
+        pend.oEnd=oi+(a==='-'?0:1); pend.gEnd=ri+(b==='-'?0:1);
+      } else { if(pend) runs.push(pend);
+        pend={type, oStart:oi, oEnd:oi+(a==='-'?0:1), gStart:ri, gEnd:ri+(b==='-'?0:1)}; }
+    } else if(pend){ runs.push(pend); pend=null; }
+    if(a!=='-') oi++;
+    if(b!=='-') ri++;
+  }
+  if(pend) runs.push(pend);
+
+  const ins=runs.filter(r=>r.type==='ins').sort((a,b)=>(b.oEnd-b.oStart)-(a.oEnd-a.oStart));
+  const main=ins[0]||null;
+  const edited=gene.slice(0,gStart)+oligo+gene.slice(gEnd);
+  const insStart = main ? gStart+main.oStart : gStart+Math.floor(oligo.length/2);
+  const insEnd = main ? gStart+main.oEnd : insStart;
+
+  const codingEdited=new Uint8Array(edited.length);
+  for(let i=0;i<gStart;i++) codingEdited[i]=cds.coding[i];
+  { let oj=0, rj=0, lastFlag = gStart>0 ? cds.coding[gStart-1] : 1;
+    for(let c=0;c<aln.qAln.length;c++){
+      const a=aln.qAln[c], b=aln.rAln[c];
+      if(b!=='-'){ lastFlag=cds.coding[gStart+rj]||0; rj++; }
+      if(a!=='-'){ codingEdited[gStart+oj]=lastFlag; oj++; }
+    } }
+  for(let i=gEnd;i<gene.length;i++) codingEdited[gStart+oligo.length+(i-gEnd)]=cds.coding[i];
+
+  const codingIdx=[];
+  for(let i=0;i<edited.length;i++) if(codingEdited[i]) codingIdx.push(i);
+  let cdsEdited=''; for(const i of codingIdx) cdsEdited += edited[i];
+  const pepEdited=translate(cdsEdited);
+  let cdsWT=''; for(let i=0;i<gene.length;i++) if(cds.coding[i]) cdsWT += gene[i];
+  const pepWT=translate(cdsWT);
+
+  let insCodingStart=-1, insCodingEnd=-1;
+  for(let p=0;p<codingIdx.length;p++){
+    if(codingIdx[p]>=insStart && insCodingStart<0) insCodingStart=p;
+    if(codingIdx[p]<insEnd) insCodingEnd=p+1;
+  }
+  const insCodingLen=(insCodingStart>=0 && insCodingEnd>insCodingStart)?insCodingEnd-insCodingStart:0;
+  let insPeptide='';
+  if(insCodingLen>0 && insCodingStart%3===0 && insCodingLen%3===0)
+    insPeptide=translate(cdsEdited.slice(insCodingStart,insCodingEnd));
+  const aaStart=insCodingStart>=0?Math.floor(insCodingStart/3):-1;
+  const aaEnd=insCodingLen>0?Math.floor(insCodingEnd/3):-1;
+  const inFrame = insCodingLen>0 && insCodingLen%3===0 && insCodingStart%3===0;
+
+  const warnings=[];
+  if(main){
+    if(insCodingLen===0) warnings.push('The inserted bases fall outside the coding sequence — check how the CDS is defined.');
+    else if(insCodingLen%3!==0) warnings.push('Insert is '+insCodingLen+' coding nt, not a multiple of 3 — everything downstream frameshifts.');
+    else if(insCodingStart%3!==0) warnings.push('Insert starts mid-codon (offset '+(insCodingStart%3)+'), so the junction residues change.');
+  } else {
+    warnings.push('No inserted bases found — this oligo only substitutes or deletes sequence.');
+  }
+  const stopIdx=pepEdited.indexOf('*');
+  if(stopIdx>=0 && aaStart>=0 && stopIdx<aaStart)
+    warnings.push('A stop codon appears at residue '+(stopIdx+1)+', upstream of the tag.');
+  if(out.site!=null && main){
+    const offset=insStart-out.site; out.siteOffset=offset;
+    if(offset!==0) warnings.push('Insertion sits '+Math.abs(offset)+' nt '+(offset>0?'downstream of':'upstream of')+
+      ' the expected '+terminus+'-terminal site.');
+  }
+
+  Object.assign(out, {
+    ok:true, oligo, oligoAsEntered:oligoIn, strand, gStart, gEnd, edited, codingEdited,
+    insStart, insEnd, insertSeq: main?oligo.slice(main.oStart,main.oEnd):'',
+    lhaLen: main?main.oStart:0, rhaLen: main?oligo.length-main.oEnd:0,
+    recode: runs.filter(r=>r.type==='sub').map(s=>({
+      editedPos:gStart+s.oStart, from:geneU.slice(gStart+s.gStart,gStart+s.gEnd),
+      to:oligo.slice(s.oStart,s.oEnd).toUpperCase() })),
+    oligoDeletions: runs.filter(r=>r.type==='del').map(d=>({
+      editedPos:gStart+d.oStart, bases:geneU.slice(gStart+d.gStart,gStart+d.gEnd) })),
+    pepEdited, pepWT, insPeptide, aaStart, aaEnd, inFrame, warnings,
+    armIdentity: Math.min(pick.headId, pick.tailId), insCodingLen
+  });
+  return out;
+}
+
+function kmerIndex(ref,k){
+  const idx=new Map();
+  for(let i=0;i+k<=ref.length;i++){
+    const s=ref.substr(i,k); let a=idx.get(s);
+    if(!a){ a=[]; idx.set(s,a); }
+    if(a.length<24) a.push(i);
+  }
+  return idx;
+}
+function diagonalVote(idx, read, k){
+  const votes=new Map(); let best=0, bestDiag=0;
+  const step = read.length>4000?3:1;
+  for(let i=0;i+k<=read.length;i+=step){
+    const hits=idx.get(read.substr(i,k)); if(!hits) continue;
+    for(const p of hits){
+      const d=p-i, bucket=d>>5, v=(votes.get(bucket)||0)+1;
+      votes.set(bucket,v);
+      if(v>best){ best=v; bestDiag=d; }
+    }
+  }
+  return { votes:best, diag:bestDiag };
+}
+function placeRead(readRaw, ref, refIdx, k){
+  const read=readRaw.toUpperCase().replace(/[^ACGTN]/g,'N');
+  const fwdVote=diagonalVote(refIdx, read, k);
+  const rev=rc(read), revVote=diagonalVote(refIdx, rev, k);
+  const useRev=revVote.votes>fwdVote.votes;
+  const q=useRev?rev:read, vote=useRev?revVote:fwdVote;
+  const pad=Math.max(120, Math.round(q.length*0.25));
+  let lo=0, hi=ref.length;
+  if(vote.votes>=3){ lo=Math.max(0, vote.diag-pad); hi=Math.min(ref.length, vote.diag+q.length+pad); }
+  if((hi-lo)*q.length > 3.0e7){
+    return { strand:'+', query:q, score:-1e9, placed:false,
+      qStart:0, qEnd:0, rStart:0, rEnd:0, qAln:'', rAln:'', votes:vote.votes };
+  }
+  const a=affineAlign(q, ref.slice(lo,hi).toUpperCase(), { mode:'local' });
+  return { strand: useRev?'−':'+', query:q, score:a.score, placed:true,
+    qStart:a.qStart, qEnd:a.qEnd, rStart:lo+a.rStart, rEnd:lo+a.rEnd,
+    qAln:a.qAln, rAln:a.rAln, votes:vote.votes };
+}
+function positionView(aln, refLen){
+  const state=new Uint8Array(refLen);
+  const readBase=new Array(refLen).fill('');
+  const insAt=new Map();
+  let ri=aln.rStart, pendingIns='';
+  for(let c=0;c<aln.qAln.length;c++){
+    const a=aln.qAln[c], b=aln.rAln[c];
+    if(b==='-'){ pendingIns+=a; continue; }
+    if(pendingIns){ insAt.set(ri,pendingIns); pendingIns=''; }
+    if(a==='-'){ state[ri]=3; readBase[ri]='-'; }
+    else { state[ri]=(a===b||a==='N')?1:2; readBase[ri]=a; }
+    ri++;
+  }
+  if(pendingIns) insAt.set(ri,pendingIns);
+  return { state, readBase, insAt };
+}
+function countWindow(view, from, to){
+  const r={match:0,mismatch:0,del:0,uncovered:0,ins:0};
+  for(let i=Math.max(0,from); i<Math.min(view.state.length,to); i++){
+    const s=view.state[i];
+    if(s===1) r.match++; else if(s===2) r.mismatch++; else if(s===3) r.del++; else r.uncovered++;
+  }
+  for(const [pos,bases] of view.insAt) if(pos>=from && pos<to) r.ins += bases.length;
+  return r;
+}
+function classifyRead(rec, edit, refIdx, wtIdx, k){
+  const alnE=placeRead(rec.seq, edit.edited, refIdx, k);
+  const alnW=placeRead(rec.seq, edit.gene, wtIdx, k);
+  const view=positionView(alnE, edit.edited.length);
+  const insS=edit.insStart, insE=edit.insEnd, FLANK=12;
+  const inside=countWindow(view,insS,insE);
+  const left=countWindow(view,insS-FLANK,insS);
+  const right=countWindow(view,insE,insE+FLANK+1);
+  const spanned = left.uncovered===0 && right.uncovered===0 &&
+                  (insE===insS || inside.uncovered < (insE-insS));
+  const alignedLen=alnE.rEnd-alnE.rStart;
+  const totals=countWindow(view,alnE.rStart,alnE.rEnd);
+  totals.ins=0;
+  for(const [pos,bases] of view.insAt)
+    if(pos>=alnE.rStart && pos<=alnE.rEnd) totals.ins += bases.length;
+  const identity=alignedLen?totals.match/alignedLen:0;
+  const insLen=insE-insS;
+  const insIdentity=insLen?inside.match/insLen:null;
+  const junctionIndel=left.del+right.del+left.ins+right.ins;
+  const deltaScore=alnE.score-alnW.score;
+
+  let call, tone, detail;
+  if(!alnE.placed){
+    call='Not placed'; tone='grey';
+    detail='This sequence is too long to align against a reference this size — trim it first.';
+  } else if(!spanned){
+    call='Site not covered'; tone='grey';
+    detail='The trace does not read cleanly across both junctions.';
+  } else if(insLen && inside.del>=insLen*0.8 && inside.ins===0){
+    call='Wild type'; tone='grey';
+    detail='No insertion — the trace reads straight through the unedited junction.';
+  } else if(insLen && (inside.del>0 || inside.ins>0)){
+    call='Indel in insert'; tone='bad';
+    const bits=[];
+    if(inside.ins) bits.push(inside.ins+' extra nt');
+    if(inside.del) bits.push(inside.del+' nt missing');
+    detail=bits.join(' and ')+' inside the inserted sequence.';
+  } else if(junctionIndel>0){
+    call='Indel at junction'; tone='bad';
+    const bits=[];
+    const xi=left.ins+right.ins, xd=left.del+right.del;
+    if(xi) bits.push(xi+' extra nt');
+    if(xd) bits.push(xd+' nt missing');
+    detail=bits.join(' and ')+' within '+FLANK+' nt of a junction.';
+  } else if(inside.mismatch===0 && left.mismatch===0 && right.mismatch===0){
+    call='Perfect knock-in'; tone='ok';
+    detail='Insert and both junctions match the intended allele exactly.';
+  } else {
+    const n=inside.mismatch+left.mismatch+right.mismatch;
+    call = n===1 ? 'Knock-in, 1 mismatch' : 'Knock-in, '+n+' mismatches';
+    tone='warn';
+    detail=inside.mismatch+' in the insert, '+(left.mismatch+right.mismatch)+' in the junctions.';
+  }
+  if(spanned && deltaScore<0 && call!=='Wild type'){
+    call='Ambiguous'; tone='warn';
+    detail='Aligns better to the unedited gene than to the intended allele.';
+  }
+  /* Bases the local alignment clipped off each end, laid out against the
+     reference either side of the aligned span so they stay readable. */
+  const clip=new Map();
+  { const q=alnE.query||'';
+    /* Coordinates may run off either end of the reference — a trace that starts
+       in vector has nowhere to sit otherwise. The grid widens to take them. */
+    for(let i=alnE.qStart-1, p=alnE.rStart-1; i>=0; i--, p--) clip.set(p, q[i]);
+    for(let i=alnE.qEnd, p=alnE.rEnd; i<q.length; i++, p++) clip.set(p, q[i]); }
+
+  return { id:rec.id, desc:rec.desc, rawLen:rec.seq.length, aln:alnE, view, clip, call, tone, detail,
+    strand:alnE.strand, trimmed5:alnE.qStart, trimmed3:alnE.query.length-alnE.qEnd,
+    identity, insIdentity, alignedLen, mismatches:totals.mismatch, dels:totals.del,
+    ins:totals.ins, insideMismatch:inside.mismatch, insideDel:inside.del, deltaScore, spanned };
+}
+function analyzeReads(fastaText, edit){
+  const recs=parseFasta(fastaText);
+  if(!recs.length || !edit || !edit.ok) return { reads:[], records:recs };
+  const k=11;
+  const refIdx=kmerIndex(edit.edited.toUpperCase(),k);
+  const wtIdx=kmerIndex(edit.gene.toUpperCase(),k);
+  return { reads: recs.map(r=>classifyRead(r, edit, refIdx, wtIdx, k)), records:recs };
+}
+
+/* ============================================================
+   Example data
+   ============================================================ */
+const EXAMPLE = {
+gene:
+"cgtagtatgggtatcaagggatagcacgtactcccgctactggaacaaATGGGCTTTTGG"+
+"CGAATGCCTCCCTTGCCCAAGACCATGGAGCCCCAATGGAGCTGTTTGGTAAGTACTTTT"+
+"AAACCGTGCCAGGTAATTGAGTTGCACTGCCGCTGCCTCCGCGTGTACGCCCTCGTTGTG"+
+"GAAGCGGATCTCTTCCATGTTCGACGAGCAACTCTGGACCCTTACAGGAATAGCGTGAAT"+
+"AGAGGTAAGCGTACAGGTGAAGTCTGCCAACGATTCTCGACCACGGAATAAatgcgcaga"+
+"cgttatctgcgagatgcacggatttgtgggtttaacagtaggaagggatgtggcgccgga"+
+"gta",
+oligo:
+"ACAGGTGAAGTCTGCCAACGATTCTCGACCACAGAAGGATCTGGATCTGATTACAAGGAT"+
+"CATGATGGAGATTACAAGGATCATGATATTGATTACAAGGATGATGATGATAAGTAAatg"+
+"cgcagacgttatctgcgagatgcacggatt",
+reads:
+">clone_A1  T7 forward\n"+
+"NGNCGNGTTNANGNACTGGAACAAATGGGCTTTTGGCGAATGCCTCCCTTGCCCAAGACCATGGAGCCCC\n"+
+"AATGGAGCTGTTTGGTAAGTACTTTTAAACCGTGCCAGGTAATTGAGTTGCACTGCCGCTGCCTCCGCGT\n"+
+"GTACGCCCTCGTTGTGGAAGCGGATCTCTTCCATGTTCGACGAGCAACTCTGGACCCTTACAGGAATAGC\n"+
+"GTGAATAGAGGTAAGCGTACAGGTGAAGTCTGCCAACGATTCTCGACCACAGAAGGATCTGGATCTGATT\n"+
+"ACAAGGATCATGATGGAGATTACAAGGATCATGATATTGATTACAAGGATGATGATGATAAGTAAATGCG\n"+
+"CAGACGTTATCTGCGAGGCAATATGA\n"+
+">clone_B4  T7 forward\n"+
+"CNANGTCNTNTGGAACAAATGGGCTTTTGGCGAATGCCTCCCTTGCCCAAGACCATGGAGCCCCAATGGA\n"+
+"GCTGTTTGGTAAGTACTTTTAAACCGTGCCAGGTAATTGAGTTGCACTGCCGCTGCCTCCGCGTGTACGC\n"+
+"CCTCGTTGTGGAAGCGGATCTCTTCCATGTTCGACGAGCAACTCTGGACCCTTACAGGAATAGCGTGAAT\n"+
+"AGAGGTAAGCGTACAGGTGAAGTCTGCCAACGATTCTCGACCACAGAAGGATCTGGATCTGATTACAAGG\n"+
+"ATCATGATAGAGATTACAAGGATCATGATATTGATTACAAGGATGATGATGATAAGTAAATGCGCAGACG\n"+
+"TTATCTGCGAGATGCACGGTCCGCG\n"+
+">clone_C2  T7 forward\n"+
+"NCTNNANGTNGTCCCGCTACTGGAACAAATGGGCTTTTGGCGAATGCCTCCCTTGCCCAAGACCATGGAG\n"+
+"CCCCAATGGAGCTGTTTGGTAAGTACTTTTAAACCGTGCCAGGTAATTGAGTTGCACTGCCGCTGCCTCC\n"+
+"GCGTGTACGCCCTCGTTGTGGAAGCGGATCTCTTCCATGTTCGACGAGCAACTCTGGACCCTTACAGGAA\n"+
+"TAGCGTGAATAGAGGTAAGCGTACAGGTGAAGTCTGCCAACGATTCTCGACCACGGAATAAATGCGCAGA\n"+
+"CGTTATCTGCGAGATGCACGGATTTGTGGGTTTAACAGTAGGAAGGGATGTGGAGTACAA\n"+
+">clone_D7  SP6 reverse\n"+
+"ATAGATTATAAACCCACAAATCCGTGCATCTCGCAGATAACGTCTGCGCATTTACTTATCATCATCATCC\n"+
+"TTGTAATCAATATCATGATCCTTGTAATCTCCATCATGATCCTTGTAATCAGATCCAGATCCTTCTGTGG\n"+
+"TCGAGAATCGTTGGCAGACTTCACCTGTACGCTTACCTCTATTCACGCTATTCCTGTAAGGGTCCAGAGT\n"+
+"TGCTCGTCGAACATGGAAGAGATCCGCTTCCACAACGAGGGCGTACACGCGGAGGCAGCGGCAGTGCAAC\n"+
+"TCAATTACCTGGCACGGTTTAAAAGTACTTACCAAACAGCTCCATTGGGGCTCCATGGTCTTGGGCAAGG\n"+
+"GAGGCATTCGCCAAAAGCNNCTNANGGGNG\n"+
+">clone_E3  T7 forward\n"+
+"TNNNGNANNTNTNGGAACAAATGGGCTTTTGGCGAATGCCTCCCTTGCCCAAGACCATGGAGCCCCAATG\n"+
+"GAGCTGTTTGGTAAGTACTTTTAAACCGTGCCAGGTAATTGAGTTGCACTGCCGCTGCCTCCGCGTGTAC\n"+
+"GCCCTCGTTGTGGAAGCGGATCTCTTCCATGTTCGACGAGCAACTCTGGACCCTTACAGGAATAGCGTGA\n"+
+"ATAGAGGTAAGCGTACAGGTGAAGTCTGCCAACGATTCTCGACCACAGAAGGATCTGGATCTGATTACAA\n"+
+"GGATCATGATGGAGATTACAAGGATCATGATATTGATTACAAGGATGATGATGATAAGTGCGCAGACGTT\n"+
+"ATCTGCGAGATGCACGAAAG\n"+
+">clone_F5  T7 forward\n"+
+"TCNCNANGNNGAACAAATGGGCTTTTGGCGAATGCCTCCCTTGCCCAAGACCATGGAGCCCCAATGGAGC\n"+
+"TGTTTGGTAAGTACTTTTAAACCGTGCCAGGTAATTGAGTTGCACTGCCGCTGCCTCCGCGTGTACGCCC\n"+
+"TCGTTGTGGAAGCGGATCTCTTCCATGTTCGACGAGCAACTCTGGACCCTTACAGGAATAGCGTGAATAG\n"+
+"AGGTAAGCGTACAGGTGAAGTCTGCCAACGATTCTCGACCACAGAAGGATCTGGATCTGATTACAAGGAT\n"+
+"CATGATGGAGATTACAAGGATCATGATATTGATTACAAGGATGATGATGATAAGCTGTAAATGCGCAGAC\n"+
+"GTTATCTGCGAGATGTATCGCA"
+};
+
+/* ============================================================
+   UI
+   ============================================================ */
+const $=s=>document.querySelector(s);
+const el=(t,c,x)=>{ const n=document.createElement(t); if(c) n.className=c;
+  if(x!=null) n.textContent=x; return n; };
+const esc=s=>String(s).replace(/[&<>"]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const fmt=n=>n==null?'—':n.toLocaleString();
+
+const state = {
+  cdsMode:'case', terminus:'C', edit:null, results:null,
+  showAll:false, showClips:true, region:'site', selected:null,
+  geneNote:null, oligoNote:null, projectName:''
+};
+
+
+function toast(msg){
+  document.querySelectorAll('.toast').forEach(n=>n.remove());
+  const t=el('div','toast',msg); document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2600);
+}
+
+/* ---- input wiring ---- */
+let timer=null;
+function schedule(){ clearTimeout(timer); timer=setTimeout(run, 180); }
+
+['#gene','#oligo'].forEach(s=>$(s).addEventListener('input', ()=>{ dismissExample(); schedule(); }));
+$('#reads').addEventListener('input', ()=>{ dismissExample(); schedule(); });
+['#cdsStart','#cdsEnd'].forEach(s=>$(s).addEventListener('input', schedule));
+
+document.querySelectorAll('[data-cds]').forEach(b=>b.addEventListener('click',()=>{
+  state.cdsMode=b.dataset.cds;
+  document.querySelectorAll('[data-cds]').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  $('#manualBox').hidden = state.cdsMode!=='manual';
+  if(state.cdsMode==='manual' && state.edit && state.edit.cds && !$('#cdsStart').value){
+    $('#cdsStart').value=state.edit.cds.start+1; $('#cdsEnd').value=state.edit.cds.end;
+  }
+  run();
+}));
+document.querySelectorAll('[data-term]').forEach(b=>b.addEventListener('click',()=>{
+  state.terminus=b.dataset.term;
+  document.querySelectorAll('[data-term]').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  run();
+}));
+
+$('#btnFile').addEventListener('click', ()=>$('#fileIn').click());
+$('#fileIn').addEventListener('change', async e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  const parts=[];
+  for(const f of files){
+    const txt=await f.text();
+    parts.push(txt.trim().startsWith('>') ? txt.trim() : ('>'+f.name.replace(/\.[^.]+$/,'')+'\n'+txt.trim()));
+  }
+  dismissExample();
+  const cur=$('#reads').value.trim();
+  $('#reads').value = (cur? cur+'\n':'') + parts.join('\n');
+  e.target.value='';
+  run();
+});
+['dragover','drop'].forEach(ev=>document.addEventListener(ev, e=>e.preventDefault()));
+$('#reads').addEventListener('drop', async e=>{
+  e.preventDefault();
+  const files=[...(e.dataTransfer.files||[])]; if(!files.length) return;
+  const parts=[];
+  for(const f of files){
+    const txt=await f.text();
+    parts.push(txt.trim().startsWith('>')?txt.trim():('>'+f.name.replace(/\.[^.]+$/,'')+'\n'+txt.trim()));
+  }
+  dismissExample();
+  const cur=$('#reads').value.trim();
+  $('#reads').value=(cur?cur+'\n':'')+parts.join('\n');
+  run();
+});
+
+let exampleLive=true;
+function dismissExample(){ if(exampleLive){ exampleLive=false; $('#exampleBanner').hidden=true; } }
+$('#btnClear').addEventListener('click', ()=>{
+  $('#gene').value=''; $('#oligo').value=''; $('#reads').value='';
+  state.geneNote=null; state.oligoNote=null; state.projectName='';
+  dismissExample(); run(); $('#gene').focus();
+});
+
+/* ---- main ---- */
+function run(){
+  /* A FASTA or GenBank paste is converted in place, once. */
+  const gn=normalizeInput($('#gene').value, true);
+  if(gn){
+    $('#gene').value=gn.seq;
+    state.geneNote=gn.format+' · '+gn.note;
+    if(gn.autoCase && state.cdsMode!=='manual'){
+      state.cdsMode='case';
+      document.querySelectorAll('[data-cds]').forEach(x=>x.setAttribute('aria-pressed', String(x.dataset.cds==='case')));
+      $('#manualBox').hidden=true;
+    }
+  }
+  const on=normalizeInput($('#oligo').value, false);
+  if(on){ $('#oligo').value=on.seq; state.oligoNote=on.format+' · '+on.note; }
+
+  const gene=$('#gene').value, oligo=$('#oligo').value;
+  const gLen=cleanSeq(gene).length, oLen=cleanSeq(oligo).length;
+  if(!gLen) state.geneNote=null;
+  if(!oLen) state.oligoNote=null;
+  const upper=(gene.match(/[A-Z]/g)||[]).length;
+  $('#geneHint').textContent = !gLen ? '—'
+    : (state.geneNote ? state.geneNote
+      : gLen+' nt · '+(upper && upper<gLen ? upper+' nt uppercase read as coding' : 'no case annotation'));
+  $('#oligoHint').textContent = !oLen ? '—' : (state.oligoNote || oLen+' nt');
+
+  if(!gLen && !oLen){
+    state.edit=null; state.results=null;
+    $('#buildOut').innerHTML='';
+    $('#resultsOut').innerHTML='';
+    $('#readHint').textContent='—';
+    $('#alnCard').innerHTML='<div class="empty"><b>Nothing aligned yet</b>Build an edit and paste some reads.</div>';
+    saveDraft(); return;
+  }
+
+  const manual={ start:+$('#cdsStart').value||0, end:+$('#cdsEnd').value||0 };
+  let edit;
+  try{ edit=buildEdit(gene, oligo, state.cdsMode, manual, state.terminus); }
+  catch(err){ edit={ ok:false, error:'Could not build the edit: '+err.message, warnings:[] }; }
+  state.edit=edit;
+  renderBuild(edit);
+
+  const readsTxt=$('#reads').value;
+  const nrec=parseFasta(readsTxt).length;
+  $('#readHint').textContent = nrec ? nrec+(nrec===1?' sequence':' sequences')+' parsed' : '—';
+
+  if(edit.ok && readsTxt.trim()){
+    try{ state.results=analyzeReads(readsTxt, edit); }
+    catch(err){ state.results=null; console.error(err); }
+  } else state.results=null;
+
+  renderResults();
+  renderAlignment();
+  saveDraft();
+}
+
+/* ---- build panel ---- */
+function renderBuild(edit){
+  const out=$('#buildOut'); out.innerHTML='';
+  if(!edit) return;
+  if(!edit.ok){
+    if(edit.error){
+      const b=el('div','banner bad'); b.style.marginTop='14px';
+      b.appendChild(el('span',null,edit.error));
+      out.appendChild(b);
+    }
+    return;
+  }
+
+  const card=el('div','card'); card.style.marginTop='14px';
+
+  /* chips */
+  const dl2=el('dl','chips'); dl2.style.margin='0';
+  const chips=[
+    ['Insert', edit.insertSeq.length+' nt', edit.insCodingLen? (edit.insCodingLen/3)+' aa' : 'non-coding'],
+    ['5′ arm', edit.lhaLen+' nt', null],
+    ['3′ arm', edit.rhaLen+' nt', null],
+    ['Oligo strand', edit.strand==='+'?'sense':'antisense', Math.round(edit.armIdentity*100)+'% arm match'],
+    ['Recoded', String(edit.recode.length), edit.recode.length? edit.recode.map(r=>r.from+'→'+r.to).join(' ') : 'none'],
+    ['Reading frame', edit.inFrame?'kept':'broken', edit.insCodingLen+' coding nt']
+  ];
+  for(const [k,v,s] of chips){
+    const c=el('div','chip');
+    c.appendChild(el('dt',null,k));
+    const d=el('dd',null,v);
+    if(s){ d.appendChild(document.createTextNode(' ')); d.appendChild(el('small',null,s)); }
+    c.appendChild(d); dl2.appendChild(c);
+  }
+
+  /* map */
+  const mapbox=el('div','mapbox'); mapbox.id='mapbox';
+  const legend=el('div','legend');
+  [['var(--arm-soft)','CDS'],['var(--sunk)','UTR / non-coding'],
+   ['var(--accent)','Insert'],['var(--arm)','Homology arm'],['var(--mark)','Recoded base']]
+   .forEach(([c,t])=>{
+     const s=el('span'); const i=el('i'); i.style.background=c;
+     s.appendChild(i); s.appendChild(document.createTextNode(t)); legend.appendChild(s);
+   });
+
+  card.appendChild(mapbox);
+  card.appendChild(legend);
+  card.appendChild(dl2);
+
+  /* warnings */
+  if(edit.warnings.length){
+    const w=el('div'); w.style.padding='14px 16px 0';
+    edit.warnings.forEach(t=>{
+      const b=el('div','banner warn'); b.style.marginBottom='8px';
+      b.appendChild(el('span',null,t)); w.appendChild(b);
+    });
+    card.appendChild(w);
+  }
+
+  /* protein */
+  card.appendChild(proteinPanel(edit));
+
+  /* sequence + exports */
+  const det=el('details','seqdump');
+  det.appendChild(el('summary',null,'Predicted allele — '+fmt(edit.edited.length)+' nt'));
+  const dump=el('div','dump');
+  dump.innerHTML = colourEdited(edit);
+  det.appendChild(dump);
+  card.appendChild(det);
+
+  const acts=el('div'); acts.style.cssText='display:flex; gap:8px; flex-wrap:wrap; padding:0 16px 16px; border-top:1px solid var(--line-soft); padding-top:14px';
+  const b1=el('button','btn primary','Download edited reference'); b1.type='button';
+  b1.addEventListener('click',()=>saveFile(editedFasta(edit), 'edited_reference.fa'));
+  const b2=el('button','btn','Download all sequences'); b2.type='button';
+  b2.addEventListener('click',()=>saveFile(projectFasta(edit), 'knockin_project.fa'));
+  const b3=el('button','btn','Copy allele'); b3.type='button';
+  b3.addEventListener('click',()=>copy(edit.edited.toUpperCase(),'Edited allele copied'));
+  acts.append(b1,b2,b3);
+  card.appendChild(acts);
+
+  out.appendChild(card);
+  drawMap(edit);
+}
+
+function colourEdited(edit){
+  const s=edit.edited, n=s.length;
+  const rec=new Set(edit.recode.map(r=>r.editedPos));
+  let html='', cls=null, buf='';
+  const flush=()=>{ if(buf) html += cls? '<span class="'+cls+'">'+esc(buf)+'</span>' : esc(buf); buf=''; };
+  for(let i=0;i<n;i++){
+    let c;
+    if(rec.has(i)) c='r';
+    else if(i>=edit.insStart && i<edit.insEnd) c='i';
+    else if((i>=edit.gStart && i<edit.insStart)||(i>=edit.insEnd && i<edit.gStart+edit.oligo.length)) c='a';
+    else c = edit.codingEdited[i] ? null : 'u';
+    if(c!==cls){ flush(); cls=c; }
+    buf += s[i];
+  }
+  flush();
+  return html;
+}
+
+function proteinPanel(edit){
+  const p=el('div','prot');
+  const h=el('div'); h.style.cssText='display:flex; align-items:baseline; gap:10px; margin-bottom:10px; flex-wrap:wrap';
+  h.appendChild(el('span','lbl','Protein junction'));
+  if(edit.insPeptide){
+    const s=el('span'); s.style.cssText='font-family:var(--mono); font-size:11.5px; color:var(--muted)';
+    s.textContent = edit.insPeptide.length+' aa inserted after residue '+(edit.aaStart);
+    h.appendChild(s);
+  }
+  p.appendChild(h);
+
+  const W=14;
+  const aaS = edit.aaStart>=0 ? edit.aaStart : 0;
+  const aaE = edit.aaEnd>=0 ? edit.aaEnd : 0;
+  const from=Math.max(0, aaS-W);
+
+  const wtFrom=Math.max(0, aaS-W);
+  const wt = edit.pepWT.slice(wtFrom, wtFrom+W+8);
+  const rowWT=el('div','protline');
+  rowWT.appendChild(tagSpan('wild type '));
+  const wtb=el('b'); wtb.textContent = wt; rowWT.appendChild(wtb);
+  p.appendChild(rowWT);
+
+  const rowED=el('div','protline');
+  rowED.appendChild(tagSpan('edited    '));
+  const pre=edit.pepEdited.slice(from, aaS);
+  const mid=edit.pepEdited.slice(aaS, aaE);
+  const post=edit.pepEdited.slice(aaE, aaE+10);
+  const b1=el('b',null,pre); rowED.appendChild(b1);
+  const em=el('em',null, mid || '—'); rowED.appendChild(em);
+  const b2=el('b',null,post); rowED.appendChild(b2);
+  p.appendChild(rowED);
+
+  const note=el('p','hint');
+  note.style.marginTop='8px';
+  note.textContent = edit.inFrame
+    ? 'Insert sits in frame; the tag reads ' + (edit.insPeptide||'—') + '.'
+    : 'Frame is not preserved across the insert — the residues shown downstream are what the allele actually encodes.';
+  p.appendChild(note);
+  return p;
+}
+function tagSpan(t){ const s=el('span','tag'); s.textContent=t; return s; }
+
+/* ---- edit map SVG ---- */
+function drawMap(edit){
+  const box=$('#mapbox'); if(!box) return;
+  const W=Math.max(320, box.clientWidth-4);
+  box.innerHTML = mapSVG(edit, W);
+}
+function mapSVG(edit, W){
+  const H=214, padL=10, padR=10, iw=W-padL-padR;
+  const total=edit.edited.length;
+  const sc=x=>padL + (x/total)*iw;
+  const NS='http://www.w3.org/2000/svg';
+  const parts=[];
+  const t=(x,y,txt,opt)=>{
+    const o=opt||{};
+    const st='font-family:'+(o.mono?'var(--mono)':'var(--sans)')+';font-size:'+(o.size||10)+
+      'px;font-weight:'+(o.weight||500)+';fill:'+(o.fill||'var(--muted)')+
+      (o.ls?';letter-spacing:'+o.ls+'em':'');
+    parts.push('<text x="'+x.toFixed(1)+'" y="'+y+'" style="'+st+'" text-anchor="'+(o.anchor||'start')+
+      '">'+esc(txt)+'</text>');
+  };
+  const r=(x,y,w,h,fill,rx)=>parts.push('<rect x="'+x.toFixed(1)+'" y="'+y+'" width="'+Math.max(0.6,w).toFixed(1)+
+    '" height="'+h+'" style="fill:'+fill+'" rx="'+(rx==null?2:rx)+'"/>');
+
+  /* --- track 1: unedited gene --- */
+  let y=20;
+  t(padL, y-6, 'UNEDITED GENE', {size:9, weight:700, ls:'.08', fill:'var(--faint)'});
+  r(padL, y, (edit.gene.length/total)*iw, 16, 'var(--sunk)', 3);
+  const cds=edit.cds;
+  if(cds && cds.end>cds.start) r(sc(cds.start), y, ((cds.end-cds.start)/total)*iw, 16, 'var(--arm-soft)', 3);
+  if(cds && cds.end>cds.start){
+    parts.push('<rect x="'+sc(cds.start).toFixed(1)+'" y="'+y+'" width="'+(((cds.end-cds.start)/total)*iw).toFixed(1)+
+      '" height="16" style="fill:none;stroke:var(--arm);stroke-width:1;opacity:.55" rx="3"/>');
+    t(sc(cds.start)+4, y+11, 'CDS', {size:8.5, weight:700, fill:'var(--arm)', ls:'.06'});
+  }
+  if(edit.site!=null){
+    const x=sc(edit.site);
+    parts.push('<path d="M'+x.toFixed(1)+' '+(y-4)+' l-4 -6 h8 z" style="fill:var(--accent)"/>');
+    parts.push('<line x1="'+x.toFixed(1)+'" y1="'+(y-4)+'" x2="'+x.toFixed(1)+'" y2="'+(y+18)+'" style="stroke:var(--accent);stroke-width:1.2" stroke-dasharray="2 2"/>');
+    t(Math.min(W-padR, x+6), y-6, edit.terminus+'-term site', {size:9, weight:600, fill:'var(--accent)'});
+  }
+
+  /* --- track 2: edited allele --- */
+  y=76;
+  t(padL, y-6, 'PREDICTED ALLELE', {size:9, weight:700, ls:'.08', fill:'var(--faint)'});
+  r(padL, y, iw, 16, 'var(--sunk)', 3);
+  { let s=-1;
+    for(let i=0;i<=total;i++){
+      const c = i<total ? edit.codingEdited[i] : 0;
+      if(c && s<0) s=i;
+      else if(!c && s>=0){ r(sc(s), y, ((i-s)/total)*iw, 16, 'var(--arm-soft)', 3); s=-1; }
+    } }
+  const oS=edit.gStart, oE=edit.gStart+edit.oligo.length;
+  r(sc(oS), y+4, ((edit.insStart-oS)/total)*iw, 8, 'var(--arm)', 1.5);
+  r(sc(edit.insEnd), y+4, ((oE-edit.insEnd)/total)*iw, 8, 'var(--arm)', 1.5);
+  r(sc(edit.insStart), y-3, ((edit.insEnd-edit.insStart)/total)*iw, 22, 'var(--accent)', 3);
+  edit.recode.forEach(rc2=>r(sc(rc2.editedPos), y-6, 1.6, 28, 'var(--mark)', .8));
+  parts.push('<line x1="'+sc(oS).toFixed(1)+'" y1="'+(y+24)+'" x2="'+sc(oE).toFixed(1)+'" y2="'+(y+24)+
+    '" style="stroke:var(--muted);stroke-width:1"/>');
+  t((sc(oS)+sc(oE))/2, y+35, 'repair oligo, '+edit.oligo.length+' nt ('+(edit.strand==='+'?'sense':'antisense')+')',
+    {size:9, anchor:'middle', fill:'var(--muted)'});
+
+  /* --- inset: the oligo blown up --- */
+  y=146;
+  const oLen=edit.oligo.length;
+  const s2=x=>padL + (x/oLen)*iw;
+  t(padL, y-6, 'REPAIR OLIGO, TO SCALE', {size:9, weight:700, ls:'.08', fill:'var(--faint)'});
+  r(padL, y, (edit.lhaLen/oLen)*iw, 20, 'var(--arm)', 3);
+  r(s2(edit.lhaLen), y, ((edit.insEnd-edit.insStart)/oLen)*iw, 20, 'var(--accent)', 3);
+  r(s2(oLen-edit.rhaLen), y, (edit.rhaLen/oLen)*iw, 20, 'var(--arm)', 3);
+  const lab=(x0,x1,txt,sub)=>{
+    const mid=(s2(x0)+s2(x1))/2, wpx=s2(x1)-s2(x0);
+    if(wpx>46) t(mid, y+13.5, txt, {size:9.5, weight:700, anchor:'middle', fill:'#fff', ls:'.05'});
+    t(mid, y+33, sub, {size:9, anchor:'middle', fill:'var(--muted)', mono:true});
+  };
+  lab(0, edit.lhaLen, '5′ ARM', edit.lhaLen+' nt');
+  lab(edit.lhaLen, oLen-edit.rhaLen, 'INSERT', (edit.insEnd-edit.insStart)+' nt');
+  lab(oLen-edit.rhaLen, oLen, '3′ ARM', edit.rhaLen+' nt');
+  edit.recode.forEach(rc2=>{
+    const x=s2(rc2.editedPos-edit.gStart);
+    r(x, y-5, 1.8, 30, 'var(--warn)', .8);
+    t(x+3, y-7, rc2.from+'→'+rc2.to, {size:8.5, weight:600, fill:'var(--warn)', mono:true});
+  });
+
+  return '<svg xmlns="'+NS+'" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" '+
+    'aria-label="Map of the locus, the predicted allele, and the repair oligo">'+parts.join('')+'</svg>';
+}
+
+/* ---- results table ---- */
+function renderResults(){
+  const out=$('#resultsOut'); out.innerHTML='';
+  if(!state.results || !state.results.reads.length){
+    if($('#reads').value.trim() && state.edit && !state.edit.ok){
+      const b=el('div','banner warn'); b.style.marginTop='14px';
+      b.appendChild(el('span',null,'Fix the edit above before the clones can be scored.'));
+      out.appendChild(b);
+    }
+    return;
+  }
+  const reads=state.results.reads;
+  const card=el('div','card'); card.style.marginTop='14px';
+
+  const summary=el('div'); summary.style.cssText='display:flex; gap:8px; flex-wrap:wrap; padding:14px 16px; border-bottom:1px solid var(--line-soft)';
+  const tally={};
+  reads.forEach(r=>{ const key=r.tone; tally[key]=(tally[key]||0)+1; });
+  const order=[['ok','perfect'],['warn','with mismatches'],['bad','with indels'],['grey','wild type or uncovered']];
+  order.forEach(([tone,word])=>{
+    if(!tally[tone]) return;
+    const p=el('span','pill '+tone, tally[tone]+' '+word);
+    summary.appendChild(p);
+  });
+  card.appendChild(summary);
+
+  const wrap=el('div','tblwrap');
+  const tb=el('table','tbl');
+  tb.innerHTML='<thead><tr><th>Clone</th><th>Call</th><th class="num">Strand</th>'+
+    '<th class="num">Read</th><th class="num">Clipped</th><th class="num">Insert match</th>'+
+    '<th class="num">Identity</th></tr></thead>';
+  const body=el('tbody');
+  reads.forEach((r,i)=>{
+    const tr=el('tr');
+    tr.dataset.i=i;
+    if(state.selected===i) tr.className='sel';
+    const c1=el('td','name'); c1.appendChild(el('div',null,r.id));
+    if(r.desc) c1.appendChild(el('div','det',r.desc));
+    const c2=el('td');
+    c2.appendChild(el('span','pill '+r.tone, r.call));
+    c2.appendChild(el('div','det', r.detail));
+    const c3=el('td','num'); c3.appendChild(el('span','strand', r.strand));
+    const c4=el('td','num', fmt(r.rawLen));
+    const c5=el('td','num', r.trimmed5+' / '+r.trimmed3);
+    const c6=el('td','num', r.insIdentity==null?'—':(r.insIdentity*100).toFixed(1)+'%');
+    const c7=el('td','num');
+    c7.appendChild(el('div',null,(r.identity*100).toFixed(1)+'%'));
+    const bar=el('div','bar'); const fill=el('i');
+    fill.style.width=Math.max(2,Math.round(r.identity*100))+'%';
+    fill.style.background = r.tone==='ok'?'var(--ok)': r.tone==='bad'?'var(--bad)': r.tone==='warn'?'var(--warn)':'var(--muted)';
+    bar.appendChild(fill); bar.style.marginLeft='auto'; c7.appendChild(bar);
+    tr.append(c1,c2,c3,c4,c5,c6,c7);
+    tr.style.cursor='pointer';
+    tr.addEventListener('click',()=>{
+      state.selected = state.selected===i ? null : i;
+      renderResults(); renderAlignment();
+      document.getElementById('alignment').scrollIntoView({behavior:'smooth', block:'start'});
+    });
+    body.appendChild(tr);
+  });
+  tb.appendChild(body); wrap.appendChild(tb); card.appendChild(wrap);
+
+  const foot=el('div'); foot.style.cssText='padding:11px 16px; border-top:1px solid var(--line-soft); font-size:11.5px; color:var(--faint)';
+  foot.textContent='Clipped = bases trimmed from each end before scoring. Insert match is identity across the inserted bases alone; identity is over the whole aligned span. Click a row to isolate it below.';
+  card.appendChild(foot);
+  out.appendChild(card);
+}
+
+/* ---- alignment viewer ---- */
+function renderAlignment(){
+  const card=$('#alnCard');
+  card.innerHTML='';
+  const edit=state.edit;
+  if(!edit || !edit.ok || !state.results || !state.results.reads.length){
+    card.innerHTML='<div class="empty"><b>Nothing aligned yet</b>Build an edit and paste some reads.</div>';
+    return;
+  }
+  const head=el('div','alnhead');
+  head.appendChild(el('span','lbl','View'));
+  const seg=el('div','seg');
+  [['site','Edit site'],['oligo','Oligo footprint'],['full','Everything']].forEach(([k,t])=>{
+    const b=el('button',null,t); b.type='button';
+    b.setAttribute('aria-pressed', String(state.region===k));
+    b.addEventListener('click',()=>{ state.region=k; renderAlignment(); });
+    seg.appendChild(b);
+  });
+  head.appendChild(seg);
+  const tgl=el('button','btn', state.showAll?'Showing every base':'Showing differences');
+  tgl.type='button'; tgl.setAttribute('aria-pressed', String(state.showAll));
+  tgl.addEventListener('click',()=>{ state.showAll=!state.showAll; renderAlignment(); });
+  head.appendChild(tgl);
+  const clp=el('button','btn','Clipped ends');
+  clp.type='button'; clp.setAttribute('aria-pressed', String(state.showClips));
+  clp.addEventListener('click',()=>{ state.showClips=!state.showClips; renderAlignment(); });
+  head.appendChild(clp);
+  if(state.selected!=null){
+    const b=el('button','btn','Show all clones'); b.type='button';
+    b.addEventListener('click',()=>{ state.selected=null; renderResults(); renderAlignment(); });
+    head.appendChild(b);
+  }
+  const spacer=el('div'); spacer.style.marginLeft='auto'; head.appendChild(spacer);
+  const bp=el('button','btn','PNG'); bp.type='button';
+  bp.addEventListener('click',()=>exportFigure('png'));
+  const bs=el('button','btn','SVG'); bs.type='button';
+  bs.addEventListener('click',()=>exportFigure('svg'));
+  head.append(bp,bs);
+  card.appendChild(head);
+
+  const scroll=el('div','alnscroll'); scroll.id='alnscroll';
+  const aln=el('div','aln'); scroll.appendChild(aln); card.appendChild(scroll);
+
+  const model=buildModel();
+  if(!model){ card.appendChild(el('div','empty','Nothing in range.')); return; }
+  renderModelDOM(model, aln);
+
+  const key=el('div'); key.className='alnkey';
+  key.innerHTML='<span><b class="k-m">.</b> matches the reference</span>'+
+    '<span><b class="k-x">A</b> mismatch</span>'+
+    '<span><b class="k-d">-</b> base deleted in the clone</span>'+
+    '<span><b class="k-i">-</b> reference gap: the clone has extra bases here</span>'+
+    '<span><b class="k-r">A</b> recoding you designed into the oligo</span>'+
+    '<span><b class="k-c">A</b> clipped end — shown, but not scored</span>';
+  card.appendChild(key);
+}
+
+function regionBounds(){
+  const e=state.edit, reads=state.results.reads;
+  const shown = state.selected!=null ? [reads[state.selected]] : reads;
+  if(state.region==='site'){
+    return [Math.max(0, e.insStart-60), Math.min(e.edited.length, e.insEnd+60)];
+  }
+  if(state.region==='oligo'){
+    return [Math.max(0, e.gStart-20), Math.min(e.edited.length, e.gStart+e.oligo.length+20)];
+  }
+  let lo=e.edited.length, hi=0;
+  shown.forEach(r=>{
+    const a = r.aln.rStart - (state.showClips ? r.trimmed5 : 0);
+    const b = r.aln.rEnd + (state.showClips ? r.trimmed3 : 0);
+    lo=Math.min(lo, a); hi=Math.max(hi, b);
+  });
+  if(hi<=lo) return [0, e.edited.length];
+  /* Not clamped to the reference: lo may be negative and hi run past its end,
+     so bases hanging off either edge still get a column. */
+  return [lo-2, hi+2];
+}
+
+function measureCols(){
+  const scroll=$('#alnscroll');
+  const probe=el('span'); probe.className='aln';
+  probe.style.cssText='position:absolute; visibility:hidden; white-space:pre; font-family:var(--mono); font-size:12.5px';
+  probe.textContent='0'.repeat(100);
+  document.body.appendChild(probe);
+  const cw=probe.getBoundingClientRect().width/100;
+  probe.remove();
+  const avail=(scroll?scroll.clientWidth:760) - 32 - 178;
+  return { cw, cols: Math.max(30, Math.min(150, Math.floor(avail/cw))) };
+}
+
+/* A ruler line whose numbers END on each multiple of ten. */
+function rulerFor(s, en){
+  const n=en-s, line=new Array(n).fill(' ');
+  for(let i=s;i<en;i++){
+    const pos=i+1;
+    if(pos%10===0){
+      const lbl=String(pos), col=i-s, st=col-lbl.length+1;
+      if(st>=0) for(let j=0;j<lbl.length;j++) line[st+j]=lbl[j];
+    }
+  }
+  return line.join('');
+}
+
+function buildModel(colsOverride){
+  const e=state.edit, reads=state.results.reads;
+  const shown = state.selected!=null ? [reads[state.selected]] : reads;
+  const [from,to]=regionBounds();
+  if(to<=from) return null;
+  const m=measureCols();
+  const cols = colsOverride || m.cols, cw = m.cw;
+  const rec=new Set(e.recode.map(r=>r.editedPos));
+  const L=e.edited.length, inRef=p=>p>=0 && p<L;
+
+  /* Bases a read carries that the reference does not get their own columns,
+     so every row stays in register and the reference shows a gap there. */
+  const insNeed=new Map();
+  for(const r of shown){
+    for(const [pos,bases] of r.view.insAt){
+      if(pos<from || pos>to) continue;
+      if(bases.length > (insNeed.get(pos)||0)) insNeed.set(pos, bases.length);
+    }
+  }
+  const grid=[];               // one entry per column: {p, ins} — ins<0 means a reference column
+  const colOf=new Map();       // reference position -> its column index
+  for(let p=from; p<=to; p++){
+    const k=insNeed.get(p)||0;
+    for(let j=0;j<k;j++) grid.push({p, ins:j});
+    if(p<to){ colOf.set(p, grid.length); grid.push({p, ins:-1}); }
+  }
+  const total=grid.length;
+
+  const blocks=[];
+  for(let cs=0; cs<total; cs+=cols){
+    const ce=Math.min(total, cs+cols);
+
+    /* ruler: each decade number ends on its own reference column */
+    const line=new Array(ce-cs).fill(' ');
+    for(let c=cs;c<ce;c++){
+      const g=grid[c];
+      if(g.ins>=0 || !inRef(g.p)) continue;
+      const pos=g.p+1;
+      if(pos%10) continue;
+      const lbl=String(pos), st=c-cs-lbl.length+1;
+      if(st>=0) for(let j=0;j<lbl.length;j++) line[st+j]=lbl[j];
+    }
+
+    const refRuns=[];
+    for(let c=cs;c<ce;c++){
+      const g=grid[c];
+      if(g.ins>=0){ refRuns.push({ ch:'-', cls:'gr' }); continue; }
+      if(!inRef(g.p)){ refRuns.push({ ch:' ', cls:'ov' }); continue; }
+      const ch = e.codingEdited[g.p] ? e.edited[g.p].toUpperCase() : e.edited[g.p].toLowerCase();
+      refRuns.push({ ch, cls: rec.has(g.p) ? 'rc' : ch.toUpperCase() });
+    }
+
+    const rows=shown.map(r=>{
+      const runs=[];
+      for(let c=cs;c<ce;c++){
+        const g=grid[c];
+        if(g.ins>=0){
+          const bases=r.view.insAt.get(g.p);
+          const covered = r.aln.rStart<=g.p && g.p<=r.aln.rEnd;
+          if(bases && g.ins<bases.length) runs.push({ ch:bases[g.ins], cls:'iv' });
+          else runs.push({ ch: covered?'-':' ', cls: covered?'gp':'u' });
+          continue;
+        }
+        const st = inRef(g.p) ? r.view.state[g.p] : 0;
+        if(st===0){
+          const cb = state.showClips ? r.clip.get(g.p) : null;
+          if(!cb) runs.push({ ch:' ', cls:'u' });
+          else if(!inRef(g.p)) runs.push({ ch:cb, cls:'cl' });
+          else {
+            const refch=e.edited[g.p].toUpperCase();
+            runs.push({ ch:cb, cls:(cb===refch||cb==='N')?'cl':'cx' });
+          }
+        }
+        else if(st===3) runs.push({ ch:'-', cls:'d' });
+        else if(st===2) runs.push({ ch:r.view.readBase[g.p], cls:'x' });
+        else runs.push({ ch: state.showAll ? r.view.readBase[g.p] : '.', cls:'m' });
+      }
+      return { label:r.id, runs, tone:r.tone };
+    });
+
+    let lastRef=null;
+    for(let c=ce-1;c>=cs;c--) if(grid[c].ins<0 && inRef(grid[c].p)){ lastRef=grid[c].p; break; }
+    blocks.push({ start:grid[cs].p, end: lastRef==null ? null : lastRef+1,
+      ruler:line.join(''), refRuns, rows,
+      features: featureSegs(e, cs, ce, grid, colOf, from, to) });
+  }
+  return { from, to, cols, cw, blocks, shown, edit:e };
+}
+
+function featureSegs(e, cs, ce, grid, colOf, from, to){
+  const segs=[];
+  const startCol=p => p<=from ? 0 : (colOf.has(p) ? colOf.get(p) : grid.length);
+  const endCol=p => p<=from ? 0 : (colOf.has(p-1) ? colOf.get(p-1)+1 : grid.length);
+  const push=(a,b,fill,label)=>{
+    const A=Math.max(cs, startCol(a)), B=Math.min(ce, endCol(b));
+    if(B>A) segs.push({ off:A-cs, len:B-A, fill, label });
+  };
+  push(e.gStart, e.insStart, 'var(--arm)', '5′ ARM');
+  push(e.insStart, e.insEnd, 'var(--accent)', 'INSERT');
+  push(e.insEnd, e.gStart+e.oligo.length, 'var(--arm)', '3′ ARM');
+  return segs;
+}
+
+function renderModelDOM(model, host){
+  for(const blk of model.blocks){
+    const b=el('div','blk');
+
+    const rib=el('div','ribbon');
+    const cw=model.cw;
+    blk.features.forEach(f=>{
+      const d=el('div','seg2');
+      d.style.left=(f.off*cw).toFixed(2)+'px'; d.style.width=(f.len*cw).toFixed(2)+'px';
+      d.style.background=f.fill;
+      rib.appendChild(d);
+      if(f.len>=9){
+        const t=el('div','lab2', f.label);
+        t.style.left=(f.off*cw).toFixed(2)+'px'; t.style.width=(f.len*cw).toFixed(2)+'px';
+        rib.appendChild(t);
+      }
+    });
+    b.appendChild(rib);
+
+    const ruler=el('div','arow ruler');
+    ruler.appendChild(el('span','lab',''));
+    const rs=el('span','sq'); rs.textContent=blk.ruler; ruler.appendChild(rs);
+    ruler.appendChild(el('span','co',''));
+    b.appendChild(ruler);
+
+    const ref=el('div','arow refrow');
+    ref.appendChild(el('span','lab','edited'));
+    const rq=el('span','sq'); rq.innerHTML=runsHTML(blk.refRuns); ref.appendChild(rq);
+    ref.appendChild(el('span','co', blk.end==null ? '' : fmt(blk.end)));
+    b.appendChild(ref);
+
+    blk.rows.forEach(row=>{
+      const tr=el('div','arow');
+      const lab=el('span','lab', row.label); lab.title=row.label;
+      tr.appendChild(lab);
+      const sq=el('span','sq'); sq.innerHTML=runsHTML(row.runs); tr.appendChild(sq);
+      tr.appendChild(el('span','co',''));
+      b.appendChild(tr);
+    });
+    host.appendChild(b);
+  }
+}
+
+function runsHTML(runs){
+  let html='', cls=null, buf='';
+  const flush=()=>{ if(buf) html += '<span class="'+cls+'">'+esc(buf)+'</span>'; buf=''; };
+  for(const r of runs){
+    if(r.cls!==cls){ flush(); cls=r.cls; }
+    buf += r.ch;
+  }
+  flush();
+  return html;
+}
+
+/* ---- figure export ---- */
+const FIG={ bg:'#FFFFFF', ink:'#131C25', muted:'#61707E', faint:'#98A5B2',
+  line:'#D6DDE4', arm:'#2A6B99', accent:'#AE1F59', bad:'#A62F24', badbg:'#FAE4E1',
+  A:'#2B7C50', C:'#1F62A2', G:'#96601A', T:'#A83A33', N:'#8C9AA7' };
+
+function figureSVG(){
+  const model=buildModel(); if(!model) return null;
+  const cw=7.52, lh=17, labW=11*cw, padX=18, padY=20;
+  const cols=model.cols;
+  const width=Math.ceil(padX*2 + labW + cols*cw + 70);
+  const blockH = 12 + lh*(2 + model.shown.length) + 20;
+  const headH = 78;
+  const height=Math.ceil(padY*2 + headH + blockH*model.blocks.length + 30);
+  const p=[];
+  const T=(x,y,txt,o)=>{ o=o||{};
+    p.push('<text x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" font-family="'+(o.mono?"'IBM Plex Mono',ui-monospace,Menlo,monospace":"'IBM Plex Sans',system-ui,sans-serif")+
+      '" font-size="'+(o.size||11)+'" font-weight="'+(o.w||400)+'" fill="'+(o.fill||FIG.ink)+'"'+
+      (o.anchor?' text-anchor="'+o.anchor+'"':'')+(o.len?' textLength="'+o.len.toFixed(1)+'" lengthAdjust="spacingAndGlyphs"':'')+
+      ' xml:space="preserve">'+esc(txt)+'</text>'); };
+  const R=(x,y,w,h,fill,rx)=>p.push('<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+Math.max(.5,w).toFixed(1)+
+    '" height="'+h.toFixed(1)+'" fill="'+fill+'" rx="'+(rx==null?2:rx)+'"/>');
+
+  p.push('<rect width="'+width+'" height="'+height+'" fill="'+FIG.bg+'"/>');
+  const e=model.edit;
+  let y=padY+14;
+  T(padX, y, 'Predicted knock-in allele vs. Sanger clones', {size:14, w:600});
+  y+=17;
+  T(padX, y, e.insertSeq.length+' nt insert'+(e.insPeptide?' · '+e.insPeptide:'')+
+    ' · arms '+e.lhaLen+'/'+e.rhaLen+' nt · '+e.recode.length+' recoded base'+(e.recode.length===1?'':'s'),
+    {size:10.5, fill:FIG.muted, mono:true});
+  y+=16;
+  T(padX, y, '1-based on the predicted allele · "." matches · "-" on a read = deleted · '+
+    '"-" on the reference = the read has extra bases · grey = clipped end, not scored',
+    {size:9.5, fill:FIG.faint});
+  y+=12;
+  p.push('<line x1="'+padX+'" y1="'+y+'" x2="'+(width-padX)+'" y2="'+y+'" stroke="'+FIG.line+'" stroke-width="1"/>');
+  y+=22;
+
+  const runsText=(runs, x0, yy, colorOf)=>{
+    let i=0;
+    while(i<runs.length){
+      let j=i; const c=runs[i].cls;
+      while(j<runs.length && runs[j].cls===c) j++;
+      const txt=runs.slice(i,j).map(r=>r.ch).join('');
+      const col=colorOf(c);
+      if(col.bg) R(x0+i*cw, yy-11, (j-i)*cw, 14, col.bg, 1.5);
+      if(txt.trim()) T(x0+i*cw, yy, txt, {mono:true, size:11.5, fill:col.fg, w:col.w||400, len:(j-i)*cw});
+      i=j;
+    }
+  };
+  const refColor=c=>{
+    if(c==='rc') return {fg:'#8E6208', bg:'#F8EDD8', w:700};
+    if(c==='gr') return {fg:'#8E6208', bg:'#F8EDD8', w:700};
+    if(FIG[c]) return {fg:FIG[c], w:500};
+    return {fg:FIG.ink, w:500};
+  };
+  const readColor=c=>{
+    if(c==='x' || c==='d') return {fg:FIG.bad, bg:FIG.badbg, w:700};
+    if(c==='iv') return {fg:'#8E6208', bg:'#F8EDD8', w:700};
+    if(c==='gp') return {fg:FIG.faint, bg:'#F8EDD8'};
+    if(c==='cl') return {fg:FIG.faint, bg:'#EEF1F5'};
+    if(c==='cx') return {fg:'#C57A72', bg:'#EEF1F5'};
+    if(c==='u') return {fg:FIG.line};
+    return {fg:FIG.faint};
+  };
+
+  const x0=padX+labW;
+  for(const blk of model.blocks){
+    blk.features.forEach(f=>{
+      R(x0+f.off*cw, y-12, f.len*cw, 9, f.fill.indexOf('accent')>=0?FIG.accent:FIG.arm, 2);
+      if(f.len>=9) T(x0+f.off*cw+3, y-4.5, f.label, {size:7.5, w:700, fill:'#FFFFFF'});
+    });
+    T(x0, y+lh-3, blk.ruler, {mono:true, size:9.5, fill:FIG.faint, len:blk.ruler.length*cw});
+    y+=lh;
+    T(padX+labW-6, y+lh-3, 'edited', {size:10, w:600, anchor:'end', fill:FIG.ink});
+    runsText(blk.refRuns, x0, y+lh-3, refColor);
+    if(blk.end!=null) T(x0+blk.refRuns.length*cw+8, y+lh-3, String(blk.end), {mono:true, size:9.5, fill:FIG.faint});
+    y+=lh;
+    blk.rows.forEach(row=>{
+      T(padX+labW-6, y+lh-3, row.label.slice(0,13), {size:10, anchor:'end', fill:FIG.muted});
+      runsText(row.runs, x0, y+lh-3, readColor);
+      y+=lh;
+    });
+    y+=20;
+  }
+  return { svg:'<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+
+    '" viewBox="0 0 '+width+' '+height+'">'+p.join('')+'</svg>', width, height };
+}
+
+async function exportFigure(kind){
+  const f=figureSVG();
+  if(!f){ toast('Nothing to export yet'); return; }
+  if(kind==='svg'){ saveFile(f.svg, 'alignment.svg'); return; }
+  try{
+    const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(f.svg);
+    const img=new Image();
+    const scale=2;
+    await new Promise((res,rej)=>{ img.onload=res; img.onerror=()=>rej(new Error('render')); img.src=url; });
+    const cv=document.createElement('canvas');
+    cv.width=f.width*scale; cv.height=f.height*scale;
+    const ctx=cv.getContext('2d');
+    ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.drawImage(img,0,0,cv.width,cv.height);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+    if(!blob) throw new Error('blob');
+    saveFile(blob, 'alignment.png');
+  } catch(err){
+    toast('PNG render failed — saving SVG instead');
+    saveFile(f.svg, 'alignment.svg');
+  }
+}
+
+/* ============================================================
+   A small PDF writer — base-14 fonts, vector rects, no library.
+   Coordinates are top-left; the writer flips them for PDF space.
+   ============================================================ */
+const PW=595.28, PH=841.89;
+function PDF(){
+  const pages=[]; let cur=null;
+  const n=v=>(Math.round(v*100)/100);
+  const col=c=>(c[0]/255).toFixed(3)+' '+(c[1]/255).toFixed(3)+' '+(c[2]/255).toFixed(3);
+  const asc=s=>String(s==null?'':s)
+    .replace(/[−–—]/g,'-').replace(/[·•]/g,'-')
+    .replace(/→/g,'->').replace(/[′’]/g,"'").replace(/[″”]/g,'"')
+    .replace(/“/g,'"').replace(/‘/g,"'").replace(/×/g,'x')
+    .replace(/…/g,'...').replace(/Δ/g,'delta ').replace(/[^\x20-\x7E]/g,'?')
+    .replace(/([\\()])/g,'\\$1');
+  const F={H:'/F1',HB:'/F2',C:'/F3',CB:'/F4'};
+  const api={
+    page(){ cur=[]; pages.push(cur); return api; },
+    rect(x,y,w,h,c){ cur.push(col(c)+' rg '+n(x)+' '+n(PH-y-h)+' '+n(w)+' '+n(h)+' re f'); return api; },
+    line(x1,y1,x2,y2,c,w){ cur.push(col(c)+' RG '+n(w||.6)+' w '+n(x1)+' '+n(PH-y1)+' m '+
+      n(x2)+' '+n(PH-y2)+' l S'); return api; },
+    text(x,y,s,o){ o=o||{};
+      cur.push('BT '+(F[o.f]||'/F1')+' '+(o.size||9)+' Tf '+col(o.c||[0,0,0])+' rg 1 0 0 1 '+
+        n(x)+' '+n(PH-y)+' Tm ('+asc(s)+') Tj ET'); return api; },
+    /* Courier is metrically exact: 0.6 em per glyph. */
+    cw(size){ return size*0.6; },
+    ctext(x,y,s,size,c,bold){ return api.text(x,y,s,{f:bold?'CB':'C',size,c}); },
+    cright(x,y,s,size,c){ return api.ctext(x-String(s).length*size*0.6, y, s, size, c); },
+    count(){ return pages.length; },
+    select(i){ cur=pages[i]; return api; },
+    build(){
+      const objs=[]; const add=s=>{ objs.push(s); return objs.length; };
+      const kids=[], contentIds=[];
+      const fontIds=[
+        add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'),
+        add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'),
+        add('<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>'),
+        add('<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >>')
+      ];
+      pages.forEach(ops=>{
+        const body=ops.join('\n');
+        contentIds.push(add('<< /Length '+body.length+' >>\nstream\n'+body+'\nendstream'));
+      });
+      const pagesId=objs.length+pages.length+1;
+      pages.forEach((_,i)=>{
+        kids.push(add('<< /Type /Page /Parent '+pagesId+' 0 R /MediaBox [0 0 '+PW+' '+PH+
+          '] /Resources << /Font << /F1 '+fontIds[0]+' 0 R /F2 '+fontIds[1]+' 0 R /F3 '+
+          fontIds[2]+' 0 R /F4 '+fontIds[3]+' 0 R >> >> /Contents '+contentIds[i]+' 0 R >>'));
+      });
+      const pid=add('<< /Type /Pages /Kids ['+kids.map(k=>k+' 0 R').join(' ')+'] /Count '+kids.length+' >>');
+      const cat=add('<< /Type /Catalog /Pages '+pid+' 0 R >>');
+      let out='%PDF-1.4\n'; const offs=[];
+      objs.forEach((o,i)=>{ offs.push(out.length); out += (i+1)+' 0 obj\n'+o+'\nendobj\n'; });
+      const xref=out.length;
+      out += 'xref\n0 '+(objs.length+1)+'\n0000000000 65535 f \n';
+      offs.forEach(o=>{ out += String(o).padStart(10,'0')+' 00000 n \n'; });
+      out += 'trailer\n<< /Size '+(objs.length+1)+' /Root '+cat+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';
+      return out;
+    }
+  };
+  return api;
+}
+
+/* ---- the report ---- */
+const PC={ ink:[19,28,37], body:[49,64,78], muted:[97,112,126], faint:[152,165,178],
+  line:[214,221,228], soft:[236,241,245], white:[255,255,255],
+  arm:[42,107,153], armsoft:[226,238,247], accent:[174,31,89], accentsoft:[251,232,239],
+  ok:[39,110,73], oksoft:[224,240,231], warn:[142,98,8], warnsoft:[248,237,216],
+  bad:[166,47,36], badsoft:[250,228,225],
+  A:[43,124,80], C:[31,98,162], G:[150,96,26], T:[168,58,51], N:[140,154,167] };
+
+function exportPDF(){
+  const e=state.edit;
+  if(!e || !e.ok){ toast('Build an edit first'); return; }
+  const M=40, CWD=PW-2*M, FOOT=PH-34;
+  const d=PDF(); d.page();
+  let y=M+14, pageNo=1;
+  const need=h=>{ if(y+h>FOOT-8){ d.page(); pageNo++; y=M+14; } };
+  const rule=()=>{ d.line(M,y,PW-M,y,PC.line,.7); y+=1; };
+  const head=t=>{ need(30); y+=10; d.text(M,y,t,{f:'HB',size:8,c:PC.faint}); y+=6; rule(); y+=13; };
+
+  /* title */
+  d.text(M,y,'Knock-in validation report',{f:'HB',size:17,c:PC.ink}); y+=15;
+  const when=new Date().toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'});
+  d.text(M,y,(state.projectName? state.projectName+' · ':'')+when+' · gene '+e.gene.length+
+    ' nt · oligo '+e.oligo.length+' nt',{size:9,c:PC.muted}); y+=10; rule(); y+=6;
+
+  /* key figures */
+  head('PREDICTED EDIT');
+  const cells=[
+    ['Insert', e.insertSeq.length+' nt', e.insCodingLen? (e.insCodingLen/3)+' aa':'non-coding'],
+    ["5' homology arm", e.lhaLen+' nt',''],
+    ["3' homology arm", e.rhaLen+' nt',''],
+    ['Oligo strand', e.strand==='+'?'sense':'antisense', Math.round(e.armIdentity*100)+'% arm match'],
+    ['Recoded bases', String(e.recode.length), e.recode.map(r=>r.from+'>'+r.to).join(' ')],
+    ['Reading frame', e.inFrame?'kept':'broken', e.insCodingLen+' coding nt']
+  ];
+  const cwid=CWD/3;
+  cells.forEach((c,i)=>{
+    const cx=M+(i%3)*cwid, cy=y+Math.floor(i/3)*40;
+    d.text(cx,cy+8,c[0].toUpperCase(),{size:6.5,c:PC.faint});
+    d.ctext(cx,cy+24,c[1],12,PC.ink,true);
+    if(c[2]) d.text(cx,cy+34,c[2],{size:7,c:PC.muted});
+    d.line(cx,cy+38,cx+cwid-10,cy+38,PC.soft,.6);
+  });
+  y+=94;
+
+  /* map */
+  need(140);
+  pdfMap(d,e,M,y,CWD); y+=132;
+
+  /* protein */
+  head('PROTEIN JUNCTION');
+  const W=14, aaS=e.aaStart>=0?e.aaStart:0, aaE=e.aaEnd>=0?e.aaEnd:0, from=Math.max(0,aaS-W);
+  const cs=8, chw=d.cw(cs);
+  d.ctext(M,y,'wild type',cs,PC.muted);
+  d.ctext(M+62,y,e.pepWT.slice(from,from+W+8),cs,PC.ink,true); y+=13;
+  d.ctext(M,y,'edited',cs,PC.muted);
+  const pre=e.pepEdited.slice(from,aaS), mid=e.pepEdited.slice(aaS,aaE), post=e.pepEdited.slice(aaE,aaE+10);
+  let px=M+62;
+  d.ctext(px,y,pre,cs,PC.ink,true); px+=pre.length*chw;
+  if(mid){
+    d.rect(px,y-cs+1.5,mid.length*chw,cs+2,PC.accentsoft);
+    d.ctext(px,y,mid,cs,PC.accent,true); px+=mid.length*chw;
+  }
+  d.ctext(px,y,post,cs,PC.ink,true); y+=14;
+  d.text(M,y, e.inFrame ? 'Insert is in frame; the tag reads '+(e.insPeptide||'-')+'.'
+    : 'Frame is not preserved across the insert.', {size:8,c:PC.muted}); y+=6;
+
+  /* warnings */
+  if(e.warnings.length){
+    head('CHECK');
+    e.warnings.forEach(w=>{
+      need(20);
+      d.rect(M,y-8,CWD,17,PC.warnsoft);
+      d.rect(M,y-8,2.2,17,PC.warn);
+      d.text(M+8,y+3,w,{size:8,c:PC.body}); y+=21;
+    });
+  }
+
+  /* clone table */
+  const reads = state.results ? state.results.reads : [];
+  if(reads.length){
+    head('CLONE CALLS');
+    const colx=[M, M+118, M+250, M+292, M+346, M+424];
+    d.text(colx[0],y,'CLONE',{f:'HB',size:6.5,c:PC.faint});
+    d.text(colx[1],y,'CALL',{f:'HB',size:6.5,c:PC.faint});
+    d.text(colx[2],y,'STRAND',{f:'HB',size:6.5,c:PC.faint});
+    d.text(colx[3],y,'READ',{f:'HB',size:6.5,c:PC.faint});
+    d.text(colx[4],y,'CLIPPED',{f:'HB',size:6.5,c:PC.faint});
+    d.text(colx[5],y,'INSERT / IDENTITY',{f:'HB',size:6.5,c:PC.faint});
+    y+=4; d.line(M,y,PW-M,y,PC.line,.7); y+=12;
+    reads.forEach(r=>{
+      need(26);
+      const tone = r.tone==='ok'?PC.ok : r.tone==='warn'?PC.warn : r.tone==='bad'?PC.bad : PC.muted;
+      const bg = r.tone==='ok'?PC.oksoft : r.tone==='warn'?PC.warnsoft : r.tone==='bad'?PC.badsoft : PC.soft;
+      d.ctext(colx[0],y,r.id.slice(0,18),8,PC.ink,true);
+      d.rect(colx[1]-3,y-7.5,Math.max(56,r.call.length*4.6+8),11,bg);
+      d.text(colx[1],y,r.call,{f:'HB',size:7.5,c:tone});
+      d.ctext(colx[2]+8,y,r.strand==='+'?'+':'-',8,PC.muted);
+      d.cright(colx[3]+34,y,String(r.rawLen),8,PC.body);
+      d.cright(colx[4]+50,y,r.trimmed5+' / '+r.trimmed3,8,PC.body);
+      d.cright(colx[5]+90,y,(r.insIdentity==null?'--':(r.insIdentity*100).toFixed(1)+'%')+
+        '   '+(r.identity*100).toFixed(1)+'%',8,PC.body);
+      y+=10;
+      d.text(colx[1],y,r.detail,{size:7,c:PC.muted});
+      y+=6; d.line(M,y,PW-M,y,PC.soft,.5); y+=12;
+    });
+  }
+
+  /* alignment */
+  if(reads.length){
+    if(y > PH-320){ d.page(); y=M+14; } else { y+=16; }
+    const fs=6.2, cw=d.cw(fs), labW=58, coW=26;
+    const cols=Math.floor((CWD-labW-coW)/cw);
+    const model=buildModel(cols);
+    d.text(M,y,'ALIGNMENT',{f:'HB',size:8,c:PC.faint}); y+=6;
+    d.line(M,y,PW-M,y,PC.line,.7); y+=11;
+    d.text(M,y,'Reference is the predicted allele. "." matches; a red letter is a mismatch and a red "-" a deleted base. '+
+      'Where the reference shows "-", the read carries extra bases (amber). Greyed letters are clipped ends, shown but not scored.',
+      {size:7.5,c:PC.muted}); y+=16;
+    const x0=M+labW;
+    for(const blk of model.blocks){
+      need(16+11*(2+model.shown.length));
+      blk.features.forEach(f=>{
+        const fill = f.fill.indexOf('accent')>=0 ? PC.accent : PC.arm;
+        d.rect(x0+f.off*cw, y-8, f.len*cw, 6, fill);
+        if(f.len>=10) d.text(x0+f.off*cw+2, y-3.2, f.label.replace(/′/g,"'"), {f:'HB',size:4.6,c:PC.white});
+      });
+      y+=4;
+      d.ctext(x0,y,blk.ruler,fs,PC.faint); y+=9;
+      d.ctext(M,y,'edited',7,PC.ink,true);
+      pdfRuns(d, blk.refRuns, x0, y, fs, cw, true);
+      if(blk.end!=null) d.ctext(x0+blk.refRuns.length*cw+4, y, String(blk.end), 6, PC.faint);
+      y+=9;
+      blk.rows.forEach(row=>{
+        d.ctext(M,y,row.label.slice(0,9),7,PC.muted);
+        pdfRuns(d, row.runs, x0, y, fs, cw, false);
+        y+=9;
+      });
+      y+=13;
+    }
+  }
+
+  /* sequences */
+  if(y > PH-280){ d.page(); y=M+14; } else { y+=18; }
+  d.text(M,y,'SEQUENCES',{f:'HB',size:8,c:PC.faint}); y+=6;
+  d.line(M,y,PW-M,y,PC.line,.7); y+=14;
+  const dumpSeq=(title, seq, marks)=>{
+    need(24);
+    d.text(M,y,title,{f:'HB',size:9,c:PC.ink}); y+=12;
+    const fs=7.6, cw=d.cw(fs), per=60;
+    for(let i=0;i<seq.length;i+=per){
+      need(12);
+      d.cright(M+34,y,String(i+1),6.5,PC.faint);
+      const chunk=seq.slice(i,i+per), sx=M+46;
+      for(let j=0;j<chunk.length;j++){
+        const pos=i+j;
+        let c=PC.body, bg=null;
+        if(marks){
+          if(marks.rec.has(pos)){ c=PC.warn; bg=PC.warnsoft; }
+          else if(pos>=marks.insStart && pos<marks.insEnd) c=PC.accent;
+          else if(pos>=marks.armS && pos<marks.armE) c=PC.arm;
+        }
+        if(bg) d.rect(sx+j*cw, y-fs+1.2, cw, fs+1, bg);
+        d.ctext(sx+j*cw, y, chunk[j], fs, c);
+      }
+      y+=10.5;
+    }
+    y+=10;
+  };
+  dumpSeq('Predicted edited allele  ('+e.edited.length+' nt)', e.edited.toUpperCase(), {
+    rec:new Set(e.recode.map(r=>r.editedPos)), insStart:e.insStart, insEnd:e.insEnd,
+    armS:e.gStart, armE:e.gStart+e.oligo.length });
+  dumpSeq('Repair oligo  ('+e.oligo.length+' nt, shown sense)', e.oligo.toUpperCase(), null);
+  if(e.insertSeq) dumpSeq('Insert only  ('+e.insertSeq.length+' nt)', e.insertSeq.toUpperCase(), null);
+
+  /* footers, written back onto every finished page */
+  const total=d.count();
+  for(let i=0;i<total;i++){
+    d.select(i);
+    d.line(M, FOOT, PW-M, FOOT, PC.soft, .6);
+    d.text(M, FOOT+11, 'Knock-in Bench · predicted allele = the oligo replacing the genomic stretch its arms span',
+      {size:6.5, c:PC.faint});
+    d.cright(PW-M, FOOT+11, (i+1)+' / '+total, 6.5, PC.faint);
+  }
+  const blob=new Blob([d.build()], {type:'application/pdf'});
+  saveFile(blob, (state.projectName? state.projectName.replace(/[^\w.-]+/g,'_')+'_' : '')+'knockin_report.pdf');
+}
+
+function pdfRuns(d, runs, x0, y, fs, cw, isRef){
+  let i=0;
+  while(i<runs.length){
+    let j=i; const c=runs[i].cls;
+    while(j<runs.length && runs[j].cls===c) j++;
+    const txt=runs.slice(i,j).map(r=>r.ch).join('');
+    let fg=PC.faint, bg=null, bold=false;
+    if(isRef){
+      if(c==='rc' || c==='gr'){ fg=PC.warn; bg=PC.warnsoft; bold=true; }
+      else fg = PC[c.toUpperCase()] || PC.ink;
+    } else {
+      if(c==='x' || c==='d'){ fg=PC.bad; bg=PC.badsoft; bold=true; }
+      else if(c==='iv'){ fg=PC.warn; bg=PC.warnsoft; bold=true; }
+      else if(c==='gp'){ fg=PC.faint; bg=PC.warnsoft; }
+      else if(c==='cl'){ fg=PC.faint; bg=PC.soft; }
+      else if(c==='cx'){ fg=[197,122,114]; bg=PC.soft; }
+      else if(c==='u'){ fg=PC.line; }
+    }
+    if(bg) d.rect(x0+i*cw, y-fs+1.2, (j-i)*cw, fs+1, bg);
+    if(txt.trim()) d.ctext(x0+i*cw, y, txt, fs, fg, bold);
+    i=j;
+  }
+}
+
+/* The three-track locus map, drawn as vectors. */
+function pdfMap(d, e, x, y, w){
+  const total=e.edited.length, sc=p=>x+(p/total)*w;
+  d.text(x,y,'UNEDITED GENE',{f:'HB',size:6,c:PC.faint});
+  let ty=y+6;
+  d.rect(x, ty, (e.gene.length/total)*w, 12, PC.soft);
+  const cds=e.cds;
+  if(cds && cds.end>cds.start){
+    d.rect(sc(cds.start), ty, ((cds.end-cds.start)/total)*w, 12, PC.armsoft);
+    d.text(sc(cds.start)+3, ty+8.5, 'CDS', {f:'HB',size:5.5,c:PC.arm});
+  }
+  if(e.site!=null){
+    d.rect(sc(e.site)-.6, ty-5, 1.2, 22, PC.accent);
+    d.text(Math.min(x+w-60, sc(e.site)+3), ty-6, e.terminus+'-term site', {f:'HB',size:6,c:PC.accent});
+  }
+  ty+=32;
+  d.text(x,ty-6,'PREDICTED ALLELE',{f:'HB',size:6,c:PC.faint});
+  d.rect(x, ty, w, 12, PC.soft);
+  { let s=-1;
+    for(let i=0;i<=total;i++){
+      const c = i<total ? e.codingEdited[i] : 0;
+      if(c && s<0) s=i;
+      else if(!c && s>=0){ d.rect(sc(s), ty, ((i-s)/total)*w, 12, PC.armsoft); s=-1; }
+    } }
+  const oS=e.gStart, oE=e.gStart+e.oligo.length;
+  d.rect(sc(oS), ty+3, ((e.insStart-oS)/total)*w, 6, PC.arm);
+  d.rect(sc(e.insEnd), ty+3, ((oE-e.insEnd)/total)*w, 6, PC.arm);
+  d.rect(sc(e.insStart), ty-2, ((e.insEnd-e.insStart)/total)*w, 16, PC.accent);
+  e.recode.forEach(r=>d.rect(sc(r.editedPos), ty-4, 1.2, 20, PC.warn));
+  ty+=34;
+  d.text(x,ty-6,'REPAIR OLIGO, TO SCALE',{f:'HB',size:6,c:PC.faint});
+  const oLen=e.oligo.length, s2=p=>x+(p/oLen)*w, insLen=e.insEnd-e.insStart;
+  d.rect(x, ty, (e.lhaLen/oLen)*w, 15, PC.arm);
+  d.rect(s2(e.lhaLen), ty, (insLen/oLen)*w, 15, PC.accent);
+  d.rect(s2(oLen-e.rhaLen), ty, (e.rhaLen/oLen)*w, 15, PC.arm);
+  const lab=(a,b,t,sub)=>{
+    const wpx=s2(b)-s2(a), mid=s2(a)+wpx/2;
+    if(wpx>44) d.text(mid-t.length*2.1, ty+10, t, {f:'HB',size:6,c:PC.white});
+    d.ctext(mid-String(sub).length*2.1, ty+24, sub, 7, PC.muted);
+  };
+  lab(0,e.lhaLen,"5' ARM",e.lhaLen+' nt');
+  lab(e.lhaLen,oLen-e.rhaLen,'INSERT',insLen+' nt');
+  lab(oLen-e.rhaLen,oLen,"3' ARM",e.rhaLen+' nt');
+  e.recode.forEach(r=>{
+    const rx=s2(r.editedPos-e.gStart);
+    d.rect(rx, ty-4, 1.3, 23, PC.warn);
+    d.ctext(rx+2, ty-5, r.from+'>'+r.to, 6, PC.warn);
+  });
+}
+
+/* ---- file + clipboard ---- */
+function wrap70(s){ const o=[]; for(let i=0;i<s.length;i+=70) o.push(s.slice(i,i+70)); return o.join('\n'); }
+function editedFasta(e){
+  return '>predicted_edited_allele  '+e.edited.length+'nt  insert='+e.insertSeq.length+'nt'+
+    (e.insPeptide?'  peptide='+e.insPeptide:'')+'  arms='+e.lhaLen+'/'+e.rhaLen+'\n'+
+    wrap70(e.edited.toUpperCase())+'\n';
+}
+function projectFasta(e){
+  let s=editedFasta(e);
+  s+='>wildtype_gene  '+e.gene.length+'nt\n'+wrap70(e.gene.toUpperCase())+'\n';
+  s+='>repair_oligo  '+e.oligo.length+'nt  '+(e.strand==='+'?'sense':'antisense (shown as sense)')+'\n'+
+     wrap70(e.oligo.toUpperCase())+'\n';
+  if(e.insertSeq) s+='>insert_only  '+e.insertSeq.length+'nt\n'+wrap70(e.insertSeq.toUpperCase())+'\n';
+  const reads=$('#reads').value.trim();
+  if(reads) s+=reads.replace(/\s+$/,'')+'\n';
+  return s;
+}
+const MIME={ fa:'text/plain', fasta:'text/plain', svg:'image/svg+xml',
+  png:'image/png', pdf:'application/pdf', json:'application/json' };
+function saveFile(data, filename){
+  try{
+    const ext=(filename.split('.').pop()||'').toLowerCase();
+    const blob = (data instanceof Blob) ? data
+      : new Blob([data], {type:(MIME[ext]||'text/plain')+';charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=filename; a.rel='noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 30000);
+    toast('Saved '+filename);
+  }catch(err){
+    console.error(err);
+    if(typeof data==='string') showFallback(data, filename);
+    else toast('Could not save '+filename);
+  }
+}
+function showFallback(text, filename, dataUrl){
+  const scrim=el('div','scrim'); const d=el('div','drawer');
+  const h=el('header'); h.appendChild(el('h3',null,filename));
+  const x=el('button','btn','Close'); x.type='button';
+  const close=()=>{ scrim.remove(); d.remove(); };
+  x.addEventListener('click', close); scrim.addEventListener('click', close);
+  h.appendChild(x); d.appendChild(h);
+  const body=el('div','body');
+  if(dataUrl){
+    const box=el('div','pngbox'); box.style.padding='0';
+    const img=el('img'); img.src=dataUrl; img.style.maxWidth='100%'; img.alt='Alignment figure';
+    box.appendChild(img);
+    body.appendChild(el('p','hint','Right-click or long-press the image to save it.'));
+    body.appendChild(box);
+  } else {
+    const ta=el('textarea'); ta.value=text; ta.rows=18; ta.readOnly=true;
+    body.appendChild(el('p','hint','Downloads are not available here — copy the text below.'));
+    body.appendChild(ta);
+    const c=el('button','btn primary','Copy to clipboard'); c.type='button';
+    c.addEventListener('click',()=>copy(text,'Copied'));
+    body.appendChild(c);
+  }
+  d.appendChild(body);
+  document.body.append(scrim, d);
+}
+async function copy(text, msg){
+  try{ await navigator.clipboard.writeText(text); toast(msg||'Copied'); }
+  catch(e){
+    const ta=el('textarea'); ta.value=text;
+    ta.style.cssText='position:fixed; opacity:0; top:0';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); toast(msg||'Copied'); }catch(e2){ toast('Copy failed'); }
+    ta.remove();
+  }
+}
+
+/* ---- drafts + projects ---- */
+function currentDoc(name){
+  return { name: name||state.projectName||'', gene:$('#gene').value, oligo:$('#oligo').value,
+    reads:$('#reads').value, cdsMode:state.cdsMode, terminus:state.terminus,
+    cdsStart:+$('#cdsStart').value||0, cdsEnd:+$('#cdsEnd').value||0,
+    updatedAt: Date.now() };
+}
+function applyDoc(d){
+  $('#gene').value=d.gene||''; $('#oligo').value=d.oligo||''; $('#reads').value=d.reads||'';
+  state.cdsMode=d.cdsMode||'case'; state.terminus=d.terminus||'C';
+  state.projectName=d.name||''; state.geneNote=null; state.oligoNote=null;
+  $('#cdsStart').value=d.cdsStart||''; $('#cdsEnd').value=d.cdsEnd||'';
+  document.querySelectorAll('[data-cds]').forEach(x=>x.setAttribute('aria-pressed', String(x.dataset.cds===state.cdsMode)));
+  document.querySelectorAll('[data-term]').forEach(x=>x.setAttribute('aria-pressed', String(x.dataset.term===state.terminus)));
+  $('#manualBox').hidden = state.cdsMode!=='manual';
+  dismissExample();
+  run();
+}
+function saveDraft(){ try{ localStorage.setItem('kib-draft', JSON.stringify(currentDoc())); }catch(e){} }
+
+$('#btnPdf').addEventListener('click', ()=>{
+  try{ exportPDF(); }
+  catch(err){ console.error(err); toast('PDF build failed — opening the print dialog'); doPrint(); }
+});
+
+/* Browser printing: textareas and collapsed panels have to be expanded first. */
+let printRestore=[];
+function beforePrintFix(){
+  printRestore=[];
+  document.querySelectorAll('textarea').forEach(t=>{
+    printRestore.push([t,'height',t.style.height]);
+    t.style.height='auto'; t.style.height=(t.scrollHeight+4)+'px';
+  });
+  document.querySelectorAll('details.seqdump').forEach(dt=>{
+    printRestore.push([dt,'open',dt.open]); dt.open=true;
+  });
+}
+function afterPrintFix(){
+  printRestore.forEach(([n,k,v])=>{ if(k==='open') n.open=v; else n.style[k]=v; });
+  printRestore=[];
+}
+window.addEventListener('beforeprint', beforePrintFix);
+window.addEventListener('afterprint', afterPrintFix);
+function doPrint(){
+  beforePrintFix();
+  setTimeout(()=>{ try{ window.print(); }catch(e){ toast('Printing is blocked here — use Export PDF'); }
+    setTimeout(afterPrintFix, 800); }, 60);
+}
+
+$('#btnProjects').addEventListener('click', openProjects);
+
+/* Projects live in this browser only — no account, nothing leaves the machine. */
+const STORE='benchtools-knockin-projects';
+function loadProjects(){
+  try{ const raw=localStorage.getItem(STORE); const v=raw?JSON.parse(raw):[];
+    return Array.isArray(v)?v:[]; }catch(e){ return []; }
+}
+function writeProjects(list){
+  try{ localStorage.setItem(STORE, JSON.stringify(list)); return true; }
+  catch(e){ return false; }
+}
+
+function openProjects(){
+  const scrim=el('div','scrim'); const d=el('div','drawer');
+  const close=()=>{ scrim.remove(); d.remove(); };
+  scrim.addEventListener('click', close);
+  const h=el('header'); h.appendChild(el('h3',null,'Projects'));
+  const x=el('button','btn','Close'); x.type='button'; x.addEventListener('click', close);
+  h.appendChild(x); d.appendChild(h);
+  const body=el('div','body'); d.appendChild(body);
+  document.body.append(scrim, d);
+
+  const nameRow=el('div'); nameRow.style.cssText='display:flex; gap:8px';
+  const inp=el('input'); inp.type='text'; inp.placeholder='Name this project';
+  inp.style.fontFamily='var(--sans)';
+  const save=el('button','btn primary','Save'); save.type='button';
+  save.addEventListener('click', ()=>{
+    const nm=inp.value.trim(); if(!nm){ inp.focus(); return; }
+    const list=loadProjects();
+    const doc=currentDoc(nm);
+    const at=list.findIndex(p=>p.name.toLowerCase()===nm.toLowerCase());
+    if(at>=0) list[at]=doc; else list.unshift(doc);
+    if(writeProjects(list)){
+      state.projectName=nm; inp.value=''; toast('Saved "'+nm+'"'); list_();
+    } else {
+      toast('Browser storage is full or blocked \u2014 use Download all sequences instead');
+    }
+  });
+  nameRow.append(inp, save);
+  body.appendChild(nameRow);
+
+  const note=el('p','hint');
+  note.textContent='Saved in this browser only. Nothing is uploaded, and clearing site data clears these.';
+  body.appendChild(note);
+
+  const listBox=el('div'); listBox.style.cssText='display:flex; flex-direction:column; gap:8px';
+  body.appendChild(listBox);
+
+  function list_(){
+    listBox.innerHTML='';
+    const items=loadProjects().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+    if(!items.length){ listBox.appendChild(el('p','hint','No saved projects yet.')); return; }
+    items.forEach(v=>{
+      const row=el('div','proj');
+      const meta=el('div','meta');
+      meta.appendChild(el('b',null, v.name||'untitled'));
+      const when = v.updatedAt ? new Date(v.updatedAt).toLocaleDateString(undefined,
+        {month:'short',day:'numeric',year:'numeric'}) : '';
+      meta.appendChild(el('span',null, cleanSeq(v.gene||'').length+' nt gene \u00b7 '+
+        parseFasta(v.reads||'').length+' reads \u00b7 '+when));
+      row.appendChild(meta);
+      const open=el('button','iconbtn','Open'); open.type='button';
+      open.addEventListener('click',()=>{ applyDoc(v); close(); toast('Opened "'+(v.name||'project')+'"'); });
+      const del=el('button','iconbtn danger','Delete'); del.type='button';
+      del.addEventListener('click',()=>{
+        writeProjects(loadProjects().filter(p=>p.name!==v.name));
+        toast('Deleted'); list_();
+      });
+      row.append(open, del);
+      listBox.appendChild(row);
+    });
+  }
+  list_();
+}
+
+/* ---- resize ---- */
+let rz=null;
+window.addEventListener('resize', ()=>{
+  clearTimeout(rz);
+  rz=setTimeout(()=>{ if(state.edit && state.edit.ok) drawMap(state.edit); if(state.results) renderAlignment(); }, 200);
+});
+
+/* ---- boot ---- */
+(function boot(){
+  let restored=false;
+  try{
+    const raw=localStorage.getItem('kib-draft');
+    if(raw){
+      const d=JSON.parse(raw);
+      if(d && (cleanSeq(d.gene||'').length || cleanSeq(d.oligo||'').length)){
+        $('#gene').value=d.gene||''; $('#oligo').value=d.oligo||''; $('#reads').value=d.reads||'';
+        state.cdsMode=d.cdsMode||'case'; state.terminus=d.terminus||'C';
+        $('#cdsStart').value=d.cdsStart||''; $('#cdsEnd').value=d.cdsEnd||'';
+        document.querySelectorAll('[data-cds]').forEach(x=>x.setAttribute('aria-pressed', String(x.dataset.cds===state.cdsMode)));
+        document.querySelectorAll('[data-term]').forEach(x=>x.setAttribute('aria-pressed', String(x.dataset.term===state.terminus)));
+        $('#manualBox').hidden = state.cdsMode!=='manual';
+        exampleLive=false; $('#exampleBanner').hidden=true;
+        restored=true;
+      }
+    }
+  }catch(e){}
+  if(!restored){
+    $('#gene').value=EXAMPLE.gene;
+    $('#oligo').value=EXAMPLE.oligo;
+    $('#reads').value=EXAMPLE.reads;
+  }
+  run();
+})();
+</script>
+
+</body>
+</html>
