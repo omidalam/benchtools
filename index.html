@@ -3,22 +3,70 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script>
+/* Theme. An explicit choice is kept in localStorage, which every BenchTools
+   page shares, so picking light on one page carries to the others; with no
+   choice made the site follows the system setting. Runs before the styles
+   so the page never flashes the wrong theme.                              */
+(function(){
+  var KEY='benchtools-theme', root=document.documentElement,
+      mq=window.matchMedia('(prefers-color-scheme: light)');
+  function stored(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
+  function label(){
+    var light=root.getAttribute('data-theme')==='light',
+        b=document.querySelectorAll('[data-theme-toggle]');
+    for(var i=0;i<b.length;i++){
+      b[i].textContent = light ? 'Dark' : 'Light';
+      b[i].title = light ? 'Switch to the dark theme' : 'Switch to the light theme';
+      b[i].setAttribute('aria-label', b[i].title);
+    }
+  }
+  function apply(){
+    var s=stored();
+    root.setAttribute('data-theme', s==='light'||s==='dark' ? s : (mq.matches ? 'light' : 'dark'));
+    label();
+  }
+  apply();
+  if(mq.addEventListener) mq.addEventListener('change', apply);
+  window.addEventListener('storage', function(e){ if(e.key===KEY) apply(); });   // other open tabs
+  document.addEventListener('click', function(e){
+    if(!e.target.closest || !e.target.closest('[data-theme-toggle]')) return;
+    var next = root.getAttribute('data-theme')==='light' ? 'dark' : 'light';
+    try{ localStorage.setItem(KEY, next); }catch(err){}
+    root.setAttribute('data-theme', next); label();
+  });
+  document.addEventListener('DOMContentLoaded', label);
+})();
+</script>
 <title>BenchTools</title>
 <style>
   :root{
     --ink:#12151a; --mat:#0c0e12; --panel:#1b2027; --line:#2c333d;
     --text:#dfe4ea; --muted:#8e99a8; --accent:#ff9d3d; --accent-dim:#8a5320;
+    --accent-text:#ff9d3d; --chip:#232a33; --lift:rgba(0,0,0,.5);
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+    color-scheme:dark;
+  }
+  :root[data-theme="light"]{
+    --ink:#eef0f3; --mat:#f6f7f9; --panel:#ffffff; --line:#d8dde3;
+    --text:#1b2027; --muted:#5d6876; --accent-text:#a44d00; --chip:#f1f3f6;
+    --lift:rgba(20,30,40,.14);
+    color-scheme:light;
   }
   *{box-sizing:border-box}
   html,body{min-height:100%}
   body{margin:0;background:var(--ink);color:var(--text);font-family:var(--sans);
        display:flex;flex-direction:column;min-height:100vh}
 
-  header{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 18px}
+  header{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 18px;
+         display:flex;align-items:center;justify-content:space-between;gap:12px}
   .brand{font-family:var(--mono);font-size:13px;letter-spacing:.18em;text-transform:uppercase;
-         color:var(--accent)}
+         color:var(--accent-text)}
+  .theme{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+         background:var(--chip);color:var(--text);border:1px solid var(--line);border-radius:3px;
+         padding:7px 11px;cursor:pointer;line-height:1}
+  .theme:hover{border-color:var(--muted)}
   .brand span{color:var(--muted)}
 
   main{flex:1 1 auto;background:var(--mat);padding:48px 22px}
@@ -38,18 +86,18 @@
     background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px;
     transition:border-color .12s,transform .12s,box-shadow .12s}
   a.tool:hover{border-color:var(--accent);transform:translateY(-2px);
-    box-shadow:0 12px 34px rgba(0,0,0,.5)}
-  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    box-shadow:0 12px 34px var(--lift)}
+  :focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
 
   .tool .ic{width:38px;height:38px;margin-bottom:14px;display:flex;align-items:center;justify-content:center;
-    background:#232a33;border:1px solid var(--line);border-radius:4px}
-  .tool .ic svg{width:22px;height:22px;stroke:var(--accent);stroke-width:1.6;fill:none;
+    background:var(--chip);border:1px solid var(--line);border-radius:4px}
+  .tool .ic svg{width:22px;height:22px;stroke:var(--accent-text);stroke-width:1.6;fill:none;
     stroke-linecap:round;stroke-linejoin:round}
   .tool h2{font-family:var(--mono);font-size:13px;letter-spacing:.1em;text-transform:uppercase;
     margin:0 0 8px;color:var(--text)}
   .tool p{color:var(--muted);font-size:13px;line-height:1.6;margin:0 0 16px;flex:1 1 auto}
   .tool .go{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
-    color:var(--accent);display:flex;align-items:center;gap:6px}
+    color:var(--accent-text);display:flex;align-items:center;gap:6px}
   a.tool:hover .go{gap:10px}
 
   .soon{opacity:.5;pointer-events:none}
@@ -61,7 +109,7 @@
   footer{background:var(--panel);border-top:1px solid var(--line);padding:12px 18px;
     font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;
     justify-content:space-between;gap:14px;flex-wrap:wrap}
-  footer a{color:var(--accent);text-decoration:none}
+  footer a{color:var(--accent-text);text-decoration:none}
   footer a:hover{text-decoration:underline}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -70,6 +118,7 @@
 
 <header>
   <div class="brand">Bench&nbsp;Tools <span>/ lab utilities</span></div>
+  <button class="theme" type="button" data-theme-toggle>Light</button>
 </header>
 
 <main>
@@ -109,7 +158,7 @@
 
 <footer>
   <div>BenchTools &middot; runs entirely in your browser</div>
-  <div><a href="https://github.com/omidalam/BenchTools">Source on GitHub</a></div>
+  <div><a href="https://github.com/omidalam/benchtools">Source on GitHub</a></div>
 </footer>
 
 </body>

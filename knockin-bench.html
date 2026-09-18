@@ -3,6 +3,41 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script>
+/* Theme. An explicit choice is kept in localStorage, which every BenchTools
+   page shares, so picking light on one page carries to the others; with no
+   choice made the site follows the system setting. Runs before the styles
+   so the page never flashes the wrong theme.                              */
+(function(){
+  var KEY='benchtools-theme', root=document.documentElement,
+      mq=window.matchMedia('(prefers-color-scheme: light)');
+  function stored(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
+  function label(){
+    var light=root.getAttribute('data-theme')==='light',
+        b=document.querySelectorAll('[data-theme-toggle]');
+    for(var i=0;i<b.length;i++){
+      b[i].textContent = light ? 'Dark' : 'Light';
+      b[i].title = light ? 'Switch to the dark theme' : 'Switch to the light theme';
+      b[i].setAttribute('aria-label', b[i].title);
+    }
+  }
+  function apply(){
+    var s=stored();
+    root.setAttribute('data-theme', s==='light'||s==='dark' ? s : (mq.matches ? 'light' : 'dark'));
+    label();
+  }
+  apply();
+  if(mq.addEventListener) mq.addEventListener('change', apply);
+  window.addEventListener('storage', function(e){ if(e.key===KEY) apply(); });   // other open tabs
+  document.addEventListener('click', function(e){
+    if(!e.target.closest || !e.target.closest('[data-theme-toggle]')) return;
+    var next = root.getAttribute('data-theme')==='light' ? 'dark' : 'light';
+    try{ localStorage.setItem(KEY, next); }catch(err){}
+    root.setAttribute('data-theme', next); label();
+  });
+  document.addEventListener('DOMContentLoaded', label);
+})();
+</script>
 <title>Knock-in Bench</title>
 <style>
 /* BenchTools house palette — single dark theme, no webfonts, no network. */
@@ -11,7 +46,10 @@
   --ink:#dfe4ea; --body:#c4ccd6; --muted:#8e99a8; --faint:#6b7685;
   --line:#2c333d; --line-soft:#232a33;
   --accent:#ff9d3d; --accent-soft:#3a2510; --accent-line:#8a5320;
-  --arm:#5aa9e0; --arm-soft:#15242f;
+  /* filled orange (buttons, the insert bar) stays bright in both themes, with
+     dark text on it; --accent is the orange for text and lines             */
+  --accent-fill:#ff9d3d; --on-accent:#1a1205;
+  --arm:#5aa9e0; --arm-soft:#15242f; --on-arm:#0b1a24;
   --mark:#c9a2f0; --mark-soft:#261c36;
   --ok:#4fc98a; --ok-soft:#12261c;
   --warn:#e5b567; --warn-soft:#2d2413;
@@ -23,6 +61,20 @@
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
   --r:6px;
   color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --paper:#f4f6f8; --surface:#ffffff; --sunk:#eef1f4;
+  --ink:#131c25; --body:#31404e; --muted:#5b6977; --faint:#6b7885;
+  --line:#d6dde4; --line-soft:#e6ebf0;
+  --accent:#a44d00; --accent-soft:#fdeedd; --accent-line:#f0b77e;
+  --arm:#2a6b99; --arm-soft:#e2eef7; --on-arm:#ffffff;
+  --mark:#6b46a8; --mark-soft:#efe7f8;
+  --ok:#276e49; --ok-soft:#e0f0e7; --warn:#8e6208; --warn-soft:#f8edd8;
+  --bad:#a62f24; --bad-soft:#fae4e1;
+  --nt-a:#2b7c50; --nt-c:#1f62a2; --nt-g:#96601a; --nt-t:#a83a33; --nt-n:#8c9aa7;
+  --focus:#a44d00;
+  --shadow:0 1px 2px rgba(20,30,40,.08), 0 8px 22px -14px rgba(20,30,40,.28);
+  color-scheme:light;
 }
 img{max-width:100%}
 [hidden]{display:none!important}
@@ -64,9 +116,9 @@ button{font:inherit; cursor:pointer}
   transition:background .12s, border-color .12s;
 }
 .btn:hover{background:var(--sunk); border-color:var(--muted)}
-.btn[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#1a1205}
-.btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
-.btn.primary:hover{filter:brightness(1.08); background:var(--accent)}
+.btn[aria-pressed="true"]{background:var(--accent-fill); border-color:var(--accent-fill); color:var(--on-accent)}
+.btn.primary{background:var(--accent-fill); border-color:var(--accent-fill); color:var(--on-accent)}
+.btn.primary:hover{filter:brightness(1.08); background:var(--accent-fill)}
 .btn:disabled{opacity:.45; cursor:default}
 .seg{display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:var(--surface)}
 .seg button{
@@ -74,7 +126,7 @@ button{font:inherit; cursor:pointer}
   font-size:12px; font-weight:500; border-right:1px solid var(--line);
 }
 .seg button:last-child{border-right:0}
-.seg button[aria-pressed="true"]{background:var(--accent); color:#1a1205; font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--accent-fill); color:var(--on-accent); font-weight:600}
 
 label.lbl, .lbl{
   display:block; font-size:10.5px; font-weight:600; letter-spacing:.075em;
@@ -233,7 +285,7 @@ details.seqdump[open] summary::before{content:'▾'}
 .ribbon .seg2{position:absolute; top:0; height:9px; border-radius:2px}
 .ribbon .lab2{
   position:absolute; top:-1px; font-size:8.5px; font-weight:700; letter-spacing:.06em;
-  color:#fff; padding-left:3px; line-height:10px; white-space:nowrap; overflow:hidden;
+  color:var(--on-arm); padding-left:3px; line-height:10px; white-space:nowrap; overflow:hidden;
 }
 .aln .m{color:var(--faint)}
 .aln .rc{color:var(--mark); font-weight:600; background:var(--mark-soft); border-radius:2px}
@@ -309,7 +361,8 @@ footer code{font-family:var(--mono); font-size:11px; color:var(--muted)}
 .pngbox img{border:1px solid var(--line); border-radius:6px; background:#fff}
 
 /* ---------- BenchTools chrome ---------- */
-.bt-head{background:var(--surface); border-bottom:1px solid var(--line); padding:14px 0}
+.bt-head{background:var(--surface); border-bottom:1px solid var(--line); padding:10px 0}
+.bt-head .wrap{display:flex; align-items:center; justify-content:space-between; gap:12px}
 .bt-brand{
   font-family:var(--mono); font-size:13px; letter-spacing:.18em; text-transform:uppercase;
   color:var(--accent); text-decoration:none; display:inline-block;
@@ -334,17 +387,18 @@ footer code{font-family:var(--mono); font-size:11px; color:var(--muted)}
 
 @page{ size:A4 portrait; margin:13mm }
 @media print{
-  :root{
+  :root, :root[data-theme]{
     --paper:#fff; --surface:#fff; --sunk:#F1F4F7;
     --ink:#131C25; --body:#31404E; --muted:#61707E; --faint:#8C9AA7;
     --line:#D6DDE4; --line-soft:#E6EBF0;
     --accent:#AE1F59; --accent-soft:#FBE8EF; --accent-line:#E8A6C0;
+    --accent-fill:#AE1F59; --on-accent:#fff; --on-arm:#fff;
     --arm:#2A6B99; --arm-soft:#E2EEF7;
     --ok:#276E49; --ok-soft:#E0F0E7; --warn:#8E6208; --warn-soft:#F8EDD8;
     --mark:#6B46A8; --mark-soft:#EFE7F8;
     --bad:#A62F24; --bad-soft:#FAE4E1;
     --nt-a:#2B7C50; --nt-c:#1F62A2; --nt-g:#96601A; --nt-t:#A83A33; --nt-n:#8C9AA7;
-    --shadow:none;
+    --shadow:none; color-scheme:light;
   }
   html,body{background:#fff}
   *{-webkit-print-color-adjust:exact; print-color-adjust:exact}
@@ -372,6 +426,7 @@ footer code{font-family:var(--mono); font-size:11px; color:var(--muted)}
 <header class="bt-head">
   <div class="wrap">
     <a class="bt-brand" href="index.html">Bench&nbsp;Tools <span>/ lab utilities</span></a>
+    <button class="btn" type="button" data-theme-toggle>Light</button>
   </div>
 </header>
 
@@ -486,7 +541,7 @@ footer code{font-family:var(--mono); font-size:11px; color:var(--muted)}
 
 <footer class="bt-foot">
   <div>BenchTools &middot; runs entirely in your browser</div>
-  <div><a href="https://github.com/omidalam/BenchTools">Source on GitHub</a></div>
+  <div><a href="https://github.com/omidalam/benchtools">Source on GitHub</a></div>
 </footer>
 
 <script>
@@ -1223,7 +1278,7 @@ function renderBuild(edit){
   const mapbox=el('div','mapbox'); mapbox.id='mapbox';
   const legend=el('div','legend');
   [['var(--arm-soft)','CDS'],['var(--sunk)','UTR / non-coding'],
-   ['var(--accent)','Insert'],['var(--arm)','Homology arm'],['var(--mark)','Recoded base']]
+   ['var(--accent-fill)','Insert'],['var(--arm)','Homology arm'],['var(--mark)','Recoded base']]
    .forEach(([c,t])=>{
      const s=el('span'); const i=el('i'); i.style.background=c;
      s.appendChild(i); s.appendChild(document.createTextNode(t)); legend.appendChild(s);
@@ -1383,7 +1438,7 @@ function mapSVG(edit, W){
   const oS=edit.gStart, oE=edit.gStart+edit.oligo.length;
   r(sc(oS), y+4, ((edit.insStart-oS)/total)*iw, 8, 'var(--arm)', 1.5);
   r(sc(edit.insEnd), y+4, ((oE-edit.insEnd)/total)*iw, 8, 'var(--arm)', 1.5);
-  r(sc(edit.insStart), y-3, ((edit.insEnd-edit.insStart)/total)*iw, 22, 'var(--accent)', 3);
+  r(sc(edit.insStart), y-3, ((edit.insEnd-edit.insStart)/total)*iw, 22, 'var(--accent-fill)', 3);
   edit.recode.forEach(rc2=>r(sc(rc2.editedPos), y-6, 1.6, 28, 'var(--mark)', .8));
   parts.push('<line x1="'+sc(oS).toFixed(1)+'" y1="'+(y+24)+'" x2="'+sc(oE).toFixed(1)+'" y2="'+(y+24)+
     '" style="stroke:var(--muted);stroke-width:1"/>');
@@ -1396,16 +1451,16 @@ function mapSVG(edit, W){
   const s2=x=>padL + (x/oLen)*iw;
   t(padL, y-6, 'REPAIR OLIGO, TO SCALE', {size:9, weight:700, ls:'.08', fill:'var(--faint)'});
   r(padL, y, (edit.lhaLen/oLen)*iw, 20, 'var(--arm)', 3);
-  r(s2(edit.lhaLen), y, ((edit.insEnd-edit.insStart)/oLen)*iw, 20, 'var(--accent)', 3);
+  r(s2(edit.lhaLen), y, ((edit.insEnd-edit.insStart)/oLen)*iw, 20, 'var(--accent-fill)', 3);
   r(s2(oLen-edit.rhaLen), y, (edit.rhaLen/oLen)*iw, 20, 'var(--arm)', 3);
-  const lab=(x0,x1,txt,sub)=>{
+  const lab=(x0,x1,txt,sub,on)=>{
     const mid=(s2(x0)+s2(x1))/2, wpx=s2(x1)-s2(x0);
-    if(wpx>46) t(mid, y+13.5, txt, {size:9.5, weight:700, anchor:'middle', fill:'#fff', ls:'.05'});
+    if(wpx>46) t(mid, y+13.5, txt, {size:9.5, weight:700, anchor:'middle', fill:on, ls:'.05'});
     t(mid, y+33, sub, {size:9, anchor:'middle', fill:'var(--muted)', mono:true});
   };
-  lab(0, edit.lhaLen, '5′ ARM', edit.lhaLen+' nt');
-  lab(edit.lhaLen, oLen-edit.rhaLen, 'INSERT', (edit.insEnd-edit.insStart)+' nt');
-  lab(oLen-edit.rhaLen, oLen, '3′ ARM', edit.rhaLen+' nt');
+  lab(0, edit.lhaLen, '5′ ARM', edit.lhaLen+' nt', 'var(--on-arm)');
+  lab(edit.lhaLen, oLen-edit.rhaLen, 'INSERT', (edit.insEnd-edit.insStart)+' nt', 'var(--on-accent)');
+  lab(oLen-edit.rhaLen, oLen, '3′ ARM', edit.rhaLen+' nt', 'var(--on-arm)');
   edit.recode.forEach(rc2=>{
     const x=s2(rc2.editedPos-edit.gStart);
     r(x, y-5, 1.8, 30, 'var(--warn)', .8);
@@ -1684,7 +1739,7 @@ function featureSegs(e, cs, ce, grid, colOf, from, to){
     if(B>A) segs.push({ off:A-cs, len:B-A, fill, label });
   };
   push(e.gStart, e.insStart, 'var(--arm)', '5′ ARM');
-  push(e.insStart, e.insEnd, 'var(--accent)', 'INSERT');
+  push(e.insStart, e.insEnd, 'var(--accent-fill)', 'INSERT');
   push(e.insEnd, e.gStart+e.oligo.length, 'var(--arm)', '3′ ARM');
   return segs;
 }
@@ -1702,6 +1757,7 @@ function renderModelDOM(model, host){
       rib.appendChild(d);
       if(f.len>=9){
         const t=el('div','lab2', f.label);
+        if(f.fill.indexOf('accent')>=0) t.style.color='var(--on-accent)';
         t.style.left=(f.off*cw).toFixed(2)+'px'; t.style.width=(f.len*cw).toFixed(2)+'px';
         rib.appendChild(t);
       }

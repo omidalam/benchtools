@@ -3,13 +3,63 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script>
+/* Theme. An explicit choice is kept in localStorage, which every BenchTools
+   page shares, so picking light on one page carries to the others; with no
+   choice made the site follows the system setting. Runs before the styles
+   so the page never flashes the wrong theme.                              */
+(function(){
+  var KEY='benchtools-theme', root=document.documentElement,
+      mq=window.matchMedia('(prefers-color-scheme: light)');
+  function stored(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
+  function label(){
+    var light=root.getAttribute('data-theme')==='light',
+        b=document.querySelectorAll('[data-theme-toggle]');
+    for(var i=0;i<b.length;i++){
+      b[i].textContent = light ? 'Dark' : 'Light';
+      b[i].title = light ? 'Switch to the dark theme' : 'Switch to the light theme';
+      b[i].setAttribute('aria-label', b[i].title);
+    }
+  }
+  function apply(){
+    var s=stored();
+    root.setAttribute('data-theme', s==='light'||s==='dark' ? s : (mq.matches ? 'light' : 'dark'));
+    label();
+  }
+  apply();
+  if(mq.addEventListener) mq.addEventListener('change', apply);
+  window.addEventListener('storage', function(e){ if(e.key===KEY) apply(); });   // other open tabs
+  document.addEventListener('click', function(e){
+    if(!e.target.closest || !e.target.closest('[data-theme-toggle]')) return;
+    var next = root.getAttribute('data-theme')==='light' ? 'dark' : 'light';
+    try{ localStorage.setItem(KEY, next); }catch(err){}
+    root.setAttribute('data-theme', next); label();
+  });
+  document.addEventListener('DOMContentLoaded', label);
+})();
+</script>
 <title>Gel Labeller</title>
 <style>
   :root{
     --ink:#12151a; --mat:#0c0e12; --panel:#1b2027; --line:#2c333d;
     --text:#dfe4ea; --muted:#8e99a8; --accent:#ff9d3d; --accent-dim:#8a5320; --alert:#ff4d4d;
+    /* --accent stays bright in both themes: it marks things drawn over the
+       gel (crop frame, handles, selection). --accent-text is the orange used
+       for text and focus rings on the interface itself.                    */
+    --accent-text:#ff9d3d; --ctl:#232a33; --ctl-hover:#2a323d; --ctl-hover-line:#4a5563;
+    --pri:var(--accent-dim); --pri-line:#a8672a; --pri-text:#ffe6cc; --pri-hover:#a3641f;
+    --hi:#ffc180; --lift:rgba(0,0,0,.6); --dim:rgba(8,10,14,.8);
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+    color-scheme:dark;
+  }
+  :root[data-theme="light"]{
+    --ink:#eef0f3; --mat:#e4e7ec; --panel:#ffffff; --line:#d3d9e0;
+    --text:#1b2027; --muted:#5d6876; --alert:#c62828;
+    --accent-text:#a44d00; --ctl:#f1f3f6; --ctl-hover:#e6eaef; --ctl-hover-line:#aab3be;
+    --pri:#ff9d3d; --pri-line:#e0801f; --pri-text:#231303; --pri-hover:#ffab58;
+    --hi:#a44d00; --lift:rgba(20,30,40,.18); --dim:rgba(20,24,30,.55);
+    color-scheme:light;
   }
   *{box-sizing:border-box}
   /* .wrap and .tools set display:flex, which out-ranks the UA sheet's
@@ -22,18 +72,18 @@
   header{background:var(--panel);border-bottom:1px solid var(--line);padding:10px 14px 0;flex:0 0 auto}
   .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .brand{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
-         color:var(--accent);margin-right:6px;white-space:nowrap}
+         color:var(--accent-text);margin-right:6px;white-space:nowrap}
   .brand span{color:var(--muted)}
 
   button,select,label.file{font-family:var(--mono);font-size:11px;letter-spacing:.08em;
-    text-transform:uppercase;background:#232a33;color:var(--text);border:1px solid var(--line);
+    text-transform:uppercase;background:var(--ctl);color:var(--text);border:1px solid var(--line);
     border-radius:3px;padding:7px 11px;cursor:pointer;line-height:1}
-  button:hover:not(:disabled),label.file:hover,select:hover{border-color:#4a5563;background:#2a323d}
+  button:hover:not(:disabled),label.file:hover,select:hover{border-color:var(--ctl-hover-line);background:var(--ctl-hover)}
   button:disabled{opacity:.3;cursor:not-allowed}
-  button.primary{background:var(--accent-dim);border-color:#a8672a;color:#ffe6cc}
-  button.primary:hover:not(:disabled){background:#a3641f}
-  button.tgl.on{background:var(--accent-dim);border-color:#a8672a;color:#ffe6cc}
-  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button.primary{background:var(--pri);border-color:var(--pri-line);color:var(--pri-text)}
+  button.primary:hover:not(:disabled){background:var(--pri-hover)}
+  button.tgl.on{background:var(--pri);border-color:var(--pri-line);color:var(--pri-text)}
+  :focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
   input[type=file]{display:none}
   .sep{width:1px;height:22px;background:var(--line);margin:0 3px}
   .chk{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;
@@ -47,7 +97,7 @@
   main{flex:1 1 auto;overflow:auto;padding:22px;display:flex;justify-content:center;
        align-items:flex-start;background:var(--mat)}
   .wrap{display:flex;flex-direction:column;max-width:100%;min-width:0;
-        box-shadow:0 0 0 1px var(--line),0 18px 50px rgba(0,0,0,.6)}
+        box-shadow:0 0 0 1px var(--line),0 18px 50px var(--lift)}
   .stage{position:relative;line-height:0;overflow:hidden}
   .stage canvas{display:block;width:100%;height:auto}
   .ovl{position:absolute;inset:0;line-height:normal;cursor:crosshair}
@@ -98,16 +148,16 @@
   .tools input[type=range]{width:150px;accent-color:var(--accent);margin:0}
   .cap{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
   .pt{font-family:var(--mono);font-size:10px;color:var(--text);width:36px;text-align:right}
-  .sw{width:26px;height:24px;border-radius:3px;border:1px solid var(--line);background:#232a33;
+  .sw{width:26px;height:24px;border-radius:3px;border:1px solid var(--line);background:var(--ctl);
       cursor:pointer;padding:0;font-family:var(--mono);font-size:10px;color:var(--text);line-height:1}
-  .sw.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .sw.on{border-color:var(--accent-text);box-shadow:0 0 0 1px var(--accent-text)}
   .sw.w{background:#fff;color:#000}
   .sw.r{background:#ff2020;color:#fff}
   .sw.del{color:var(--alert)}
   .sw.ic{display:flex;align-items:center;justify-content:center}
   .sw.ic svg{width:15px;height:15px}
   .sw.ic rect{fill:currentColor;opacity:.8}
-  .sw.ic path{stroke:var(--accent);stroke-width:1.6;stroke-linecap:round;fill:none}
+  .sw.ic path{stroke:var(--accent-text);stroke-width:1.6;stroke-linecap:round;fill:none}
   .grp.dim{opacity:.3;pointer-events:none}
   .count{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.08em;
          text-transform:uppercase;color:var(--muted)}
@@ -117,27 +167,27 @@
   .drop h1{font-family:var(--mono);font-size:15px;letter-spacing:.16em;text-transform:uppercase;
            margin:0 0 10px;color:var(--text)}
   .drop p{color:var(--muted);font-size:13px;line-height:1.6;margin:0 0 18px}
-  .drop.hot{border-color:var(--accent);background:#232a33}
+  .drop.hot{border-color:var(--accent-text);background:var(--ctl)}
 
   /* ------------------------------------------------------------- tour */
-  .link{background:none;border:0;padding:6px 0;color:var(--accent);text-transform:none;
+  .link{background:none;border:0;padding:6px 0;color:var(--accent-text);text-transform:none;
         letter-spacing:.02em;font-size:12px;font-family:var(--mono);display:block;margin:12px auto 0}
   .link:hover{background:none;text-decoration:underline}
   .tour{position:fixed;inset:0;z-index:60}
-  .tour .dim{position:absolute;inset:0;background:rgba(8,10,14,.8)}
+  .tour .dim{position:absolute;inset:0;background:var(--dim)}
   /* the ring's own huge shadow is the dimming, so the cut-out always tracks
      whatever control the step is pointing at                               */
   .tour .ring{position:fixed;border:1px solid var(--accent);border-radius:4px;pointer-events:none;
-       box-shadow:0 0 0 9999px rgba(8,10,14,.8),0 0 13px rgba(255,157,61,.5)}
+       box-shadow:0 0 0 9999px var(--dim),0 0 13px rgba(255,157,61,.5)}
   .tour .card{position:fixed;width:min(345px,calc(100vw - 26px));background:var(--panel);
        border:1px solid var(--line);border-radius:6px;padding:15px 16px 12px;
-       box-shadow:0 18px 50px rgba(0,0,0,.7)}
+       box-shadow:0 18px 50px var(--lift)}
   .tour h3{font-family:var(--mono);font-size:12px;letter-spacing:.13em;text-transform:uppercase;
-       margin:0 0 9px;color:var(--accent)}
+       margin:0 0 9px;color:var(--accent-text)}
   .tour p{font-size:13px;line-height:1.65;color:var(--text);margin:0 0 13px}
   .tour p+p{margin-top:-6px}
-  .tour b{color:#ffc180;font-weight:600}
-  .tour kbd{font-family:var(--mono);font-size:11px;background:#232a33;border:1px solid var(--line);
+  .tour b{color:var(--hi);font-weight:600}
+  .tour kbd{font-family:var(--mono);font-size:11px;background:var(--ctl);border:1px solid var(--line);
        border-radius:3px;padding:1px 5px;color:var(--text)}
   .tour .row{display:flex;align-items:center;gap:7px}
   .tour .n{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted);margin-right:auto}
@@ -156,6 +206,7 @@
   <div class="bar">
     <div class="brand">Gel&nbsp;Labeller <span>/ agarose</span></div>
     <button id="guide" title="A quick tour of what everything does">Guide</button>
+    <button type="button" data-theme-toggle>Light</button>
     <label class="file" id="openBtn">Open image<input id="file" type="file" accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"></label>
     <button id="detect" disabled>Find wells</button>
     <button id="cropbtn" disabled title="Crop and straighten the gel again">Crop / straighten</button>
