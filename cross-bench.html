@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Theme. An explicit choice is kept in localStorage, which every BenchTools
+   page shares, so picking light on one page carries to the others; with no
+   choice made the site follows the system setting. Runs before the styles
+   so the page never flashes the wrong theme.                              */
+(function(){
+  var KEY='benchtools-theme', root=document.documentElement,
+      mq=window.matchMedia('(prefers-color-scheme: light)');
+  function stored(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
+  function label(){
+    var light=root.getAttribute('data-theme')==='light',
+        b=document.querySelectorAll('[data-theme-toggle]');
+    for(var i=0;i<b.length;i++){
+      b[i].textContent = light ? 'Dark' : 'Light';
+      b[i].title = light ? 'Switch to the dark theme' : 'Switch to the light theme';
+      b[i].setAttribute('aria-label', b[i].title);
+    }
+  }
+  function apply(){
+    var s=stored();
+    root.setAttribute('data-theme', s==='light'||s==='dark' ? s : (mq.matches ? 'light' : 'dark'));
+    label();
+  }
+  apply();
+  if(mq.addEventListener) mq.addEventListener('change', apply);
+  window.addEventListener('storage', function(e){ if(e.key===KEY) apply(); });   // other open tabs
+  document.addEventListener('click', function(e){
+    if(!e.target.closest || !e.target.closest('[data-theme-toggle]')) return;
+    var next = root.getAttribute('data-theme')==='light' ? 'dark' : 'light';
+    try{ localStorage.setItem(KEY, next); }catch(err){}
+    root.setAttribute('data-theme', next); label();
+  });
+  document.addEventListener('DOMContentLoaded', label);
+})();
+</script>
+<title>Cross Bench — F2 probabilities for C. elegans crosses</title>
+<style>
+/* BenchTools house palette. The green of the original was swapped for the
+   site's orange; blue still means "visible down the scope" and red a warning. */
+:root{
+  --bg:#0c0e12; --paper:#1b2027; --ink:#dfe4ea; --muted:#8e99a8;
+  --line:#2c333d; --line-soft:#232a33;
+  --track:#2c333d; --centre:#465162;
+  --pin:#ff9d3d; --pin-soft:#3a2510; --on-pin:#1a1205;
+  --hit:#5aa9e0; --hit-soft:#15242f;
+  --warn:#ff4d4d; --warn-soft:#331617;
+  --radius:6px;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg:#f4f6f8; --paper:#ffffff; --ink:#131c25; --muted:#5b6977;
+  --line:#d6dde4; --line-soft:#e6ebf0;
+  --track:#d6dde4; --centre:#aab6c4;
+  --pin:#a44d00; --pin-soft:#fdeedd; --on-pin:#ffffff;
+  --hit:#2a6b99; --hit-soft:#e2eef7;
+  --warn:#a62f24; --warn-soft:#fae4e1;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:var(--sans);
+  font-size:15px; line-height:1.5; -webkit-text-size-adjust:100%;
+}
+.mono{font-family:var(--mono)}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 96px}
+
+/* ---------- BenchTools chrome ---------- */
+.bt-head{background:var(--paper); border-bottom:1px solid var(--line); padding:10px 0}
+.bt-head .inner{max-width:1080px; margin:0 auto; padding:0 20px;
+  display:flex; align-items:center; justify-content:space-between; gap:12px}
+.bt-brand{font-family:var(--mono); font-size:13px; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--pin); text-decoration:none}
+.bt-brand span{color:var(--muted)}
+.bt-brand:hover span{color:var(--ink)}
+.bt-foot{background:var(--paper); border-top:1px solid var(--line); padding:12px 20px;
+  font-family:var(--mono); font-size:11px; color:var(--muted);
+  display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap}
+.bt-foot a{color:var(--pin); text-decoration:none}
+.bt-foot a:hover{text-decoration:underline}
+
+header.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:26px}
+h1{font-size:30px;line-height:1.1;font-weight:700;letter-spacing:-.02em;margin:0 0 6px}
+.tagline{color:var(--muted);max-width:56ch;margin:0}
+.themebtn{background:none;border:1px solid var(--line);color:var(--muted);border-radius:var(--radius);
+  padding:6px 10px;cursor:pointer;font:inherit;font-size:13px;white-space:nowrap}
+.themebtn:hover{color:var(--ink);border-color:var(--pin)}
+
+section{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
+  padding:20px;margin-bottom:18px}
+h2{font-size:13px;font-weight:600;letter-spacing:.01em;margin:0 0 4px}
+.hint{color:var(--muted);font-size:13px;margin:0 0 14px}
+.hint code{font-family:var(--mono);font-size:12px;background:var(--line-soft);padding:1px 4px;border-radius:2px}
+
+.parents{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.parents{grid-template-columns:1fr}}
+.parent label{display:block;font-weight:600;font-size:13px;margin-bottom:5px}
+.parent .sym{color:var(--pin);font-size:15px;margin-right:5px}
+textarea{width:100%;min-height:76px;resize:vertical;padding:9px 10px;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--bg);color:var(--ink);
+  font-family:var(--mono);font-size:13px;line-height:1.55}
+textarea:focus,input:focus,select:focus{outline:2px solid var(--pin);outline-offset:1px}
+
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+button.act{font:inherit;font-size:13px;font-weight:600;padding:8px 14px;border-radius:var(--radius);
+  border:1px solid var(--pin);background:var(--pin);color:var(--on-pin);cursor:pointer}
+button.act:hover{filter:brightness(1.08)}
+button.ghost{font:inherit;font-size:13px;padding:8px 12px;border-radius:var(--radius);
+  border:1px solid var(--line);background:none;color:var(--muted);cursor:pointer}
+button.ghost:hover{color:var(--ink);border-color:var(--pin)}
+
+.tablewrap{overflow-x:auto;margin:0 -4px}
+table.loci{width:100%;border-collapse:collapse;font-size:13px;min-width:930px}
+table.loci th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);
+  padding:0 8px 7px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.loci td{padding:7px 8px;border-bottom:1px solid var(--line-soft);vertical-align:middle}
+table.loci tr.needspos td{background:var(--warn-soft)}
+table.loci input[type=text],table.loci input[type=number],table.loci select{
+  font:inherit;font-size:13px;padding:4px 6px;border:1px solid var(--line);
+  border-radius:2px;background:var(--bg);color:var(--ink);width:100%}
+table.loci input.gene{font-family:var(--mono);min-width:110px}
+table.loci input.pos{width:88px;font-family:var(--mono)}
+table.loci select{min-width:78px}
+td.keep,th.keep{text-align:center}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--pin);cursor:pointer}
+button.del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:2px 5px}
+button.del:hover{color:var(--warn)}
+.empty{color:var(--muted);font-size:13px;padding:14px 4px}
+
+.opts{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;margin-top:16px;
+  padding-top:14px;border-top:1px solid var(--line-soft);font-size:13px}
+.opt{display:flex;flex-direction:column;gap:4px}
+.opt span.lab{color:var(--muted);font-size:11.5px;font-weight:600}
+.opt select{font:inherit;font-size:13px;padding:5px 7px;border:1px solid var(--line);
+  border-radius:2px;background:var(--bg);color:var(--ink)}
+label.inline{display:flex;gap:7px;align-items:center;cursor:pointer}
+
+#map{margin-top:4px}
+.chrrow{margin-bottom:12px}
+.chrhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
+.chrname{font-weight:700;font-size:13px;font-family:var(--mono)}
+.chrnote{color:var(--muted);font-size:12px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+#map svg text{font-family:var(--mono)}
+
+.readout{display:flex;flex-wrap:wrap;gap:12px;align-items:stretch}
+.bignum{flex:2 1 240px;background:var(--hit-soft);border:1px solid var(--hit);
+  border-radius:var(--radius);padding:16px 18px}
+.bignum .n{font-size:40px;font-weight:700;letter-spacing:-.03em;line-height:1;font-family:var(--mono)}
+.bignum .cap{color:var(--muted);font-size:12.5px;margin-top:6px}
+.stat{flex:1 1 150px;border:1px solid var(--line);border-radius:var(--radius);padding:14px 15px;background:var(--bg)}
+.stat .v{font-size:20px;font-weight:600;font-family:var(--mono);line-height:1.15}
+.stat .k{color:var(--muted);font-size:11.5px;margin-top:5px}
+
+ul.notes{margin:16px 0 0;padding:0;list-style:none;font-size:13px}
+ul.notes li{padding:8px 11px;border-left:2px solid var(--line);margin-bottom:6px;background:var(--bg)}
+ul.notes li.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+ul.notes li.good{border-left-color:var(--pin);background:var(--pin-soft)}
+
+/* these two tables have no wrapper of their own, so they scroll inside
+   themselves rather than dragging the whole page sideways on a phone */
+#classwrap, details .body{overflow-x:auto}
+table.classes{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+table.classes th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:600;
+  padding:0 8px 6px;border-bottom:1px solid var(--line)}
+table.classes td{padding:6px 8px;border-bottom:1px solid var(--line-soft)}
+table.classes td.g{font-family:var(--mono);font-size:12.5px}
+table.classes tr.target td{background:var(--pin-soft)}
+td.num{text-align:right;font-family:var(--mono);white-space:nowrap}
+
+details{border-top:1px solid var(--line-soft);margin-top:16px;padding-top:12px}
+details summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted)}
+details summary:hover{color:var(--ink)}
+details .body{padding-top:12px;font-size:13px;color:var(--muted)}
+details .body p{margin:0 0 10px;max-width:72ch}
+table.dom{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+table.dom th{text-align:left;font-size:11px;color:var(--muted);padding:0 6px 5px;border-bottom:1px solid var(--line)}
+table.dom td{padding:4px 6px;border-bottom:1px solid var(--line-soft)}
+table.dom input{font-family:var(--mono);font-size:12.5px;width:84px;padding:3px 5px;
+  border:1px solid var(--line);border-radius:2px;background:var(--bg);color:var(--ink)}
+a{color:var(--hit)}
+footer{color:var(--muted);font-size:12.5px;margin-top:8px;max-width:74ch}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (prefers-reduced-motion:no-preference){
+  .flash{animation:f .5s ease}
+  @keyframes f{from{background:var(--pin-soft)}to{background:transparent}}
+}
+</style>
+</head>
+<body>
+
+<header class="bt-head">
+  <div class="inner">
+    <a class="bt-brand" href="index.html">Bench&nbsp;Tools <span>/ lab utilities</span></a>
+    <button class="themebtn" type="button" data-theme-toggle>Light</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+<header class="top">
+  <div>
+    <h1>Cross Bench</h1>
+    <p class="tagline">Work out how many F2 you need to screen to pull a multi-locus strain out of a worm cross — with linkage, phase and crossover interference handled properly.</p>
+  </div>
+</header>
+
+<section>
+  <h2>1 · Parent genotypes</h2>
+  <p class="hint">Paste each parent's genotype in normal worm shorthand. Chromosome after the allele, map position optional:
+    <code>unc-119(ed3) III</code> · <code>garr-1(ok1234) I:2.5</code> (cM) · <code>oxIs12 X:7200000</code> (bp) · <code>dpy-10(e128)/+ II</code> for a heterozygote.
+    Separate loci with <code>;</code> or new lines. Anything the parser misses you can fix in the table below.</p>
+  <div class="parents">
+    <div class="parent">
+      <label for="male"><span class="sym">♂</span>Male parent</label>
+      <textarea id="male" spellcheck="false" placeholder="him-5(e1490) V; garr-1(ok1234) I:2.5"></textarea>
+    </div>
+    <div class="parent">
+      <label for="herm"><span class="sym">⚥</span>Hermaphrodite parent</label>
+      <textarea id="herm" spellcheck="false" placeholder="unc-119(ed3) III; fib-1(syb100) I:-1.4"></textarea>
+    </div>
+  </div>
+  <div class="btnrow">
+    <button class="act" id="parse" type="button">Read genotypes</button>
+    <button class="ghost" id="addrow" type="button">Add a locus by hand</button>
+    <button class="ghost" id="example" type="button">Load an example</button>
+    <button class="ghost" id="clear" type="button">Clear everything</button>
+  </div>
+</section>
+
+<section>
+  <h2>2 · Loci, map positions and what you want to keep</h2>
+  <p class="hint">Tick <strong>Keep</strong> for every locus that has to be in the final strain. Loci on the same chromosome need a map position — a WormBase genetic position in cM is best; genomic bp is converted to an estimate. Only the <em>distance between</em> loci matters, never the absolute value. Mark anything you can see down the scope as <strong>fluorescent</strong> — Cross Bench then works out how many F2 you actually have to pick and genotype, as opposed to merely look at.</p>
+  <div class="tablewrap">
+    <table class="loci" id="locitable">
+      <thead><tr>
+        <th class="keep">Keep</th>
+        <th>Gene / allele</th>
+        <th>Chr</th>
+        <th>Position</th>
+        <th>Unit</th>
+        <th>♂ male</th>
+        <th>⚥ herm</th>
+        <th>Phase</th>
+        <th>Want</th>
+        <th title="Can you see this locus down the dissecting scope before genotyping?">Fluorescent</th>
+        <th title="Homozygotes die or are sterile — removed from the viable F2 pool">Hom. lethal</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="locibody"></tbody>
+    </table>
+  </div>
+  <div class="empty" id="lociempty">No loci yet. Paste genotypes above, or add a locus by hand.</div>
+
+  <div class="opts">
+    <label class="opt"><span class="lab">Crossover model</span>
+      <select id="model">
+        <option value="interference">Complete interference (worm default)</option>
+        <option value="haldane">Haldane, no interference</option>
+      </select>
+    </label>
+    <label class="opt"><span class="lab">Loci you didn't tick</span>
+      <select id="untick">
+        <option value="any">Don't care</option>
+        <option value="wt">Must be wild type</option>
+      </select>
+    </label>
+    <label class="opt"><span class="lab">F1 you self</span>
+      <select id="f1mode">
+        <option value="carrier">Only F1 carrying every wanted allele</option>
+        <option value="all">Any cross-progeny F1</option>
+      </select>
+    </label>
+    <label class="opt"><span class="lab">Screening confidence</span>
+      <select id="conf">
+        <option value="0.95">95%</option>
+        <option value="0.99">99%</option>
+        <option value="0.9">90%</option>
+      </select>
+    </label>
+  </div>
+</section>
+
+<section id="mapsec" hidden>
+  <h2>3 · Linkage map</h2>
+  <p class="hint">Each bar is one chromosome drawn on the same 50 cM scale, so you can see at a glance which loci are going to fight you. The darker band is the low-recombination central cluster.</p>
+  <div id="map"></div>
+</section>
+
+<section id="resultsec" hidden>
+  <h2>4 · F2 outcome</h2>
+  <div class="readout" id="readout"></div>
+  <ul class="notes" id="notes"></ul>
+  <div id="classwrap"></div>
+  <div class="btnrow"><button class="ghost" id="copy" type="button">Copy summary for your notebook</button></div>
+</section>
+
+<section>
+  <details id="assumptions">
+    <summary>Assumptions, and how bp positions are converted</summary>
+    <div class="body">
+      <p><strong>The cross.</strong> Male × hermaphrodite, F1 cross-progeny hermaphrodites selfed, F2 scored. Autosomal alleles come half from each parent; on X, an F1 cross-progeny hermaphrodite gets the father's single X plus one maternal X. F1 males (which inherit no paternal X) are ignored, since you're selfing F1 hermaphrodites.</p>
+      <p><strong>Crossing over.</strong> The default model is complete interference: exactly one crossover per bivalent per meiosis, giving each chromosome a 50 cM genetic length, so a crossover in one interval excludes a crossover in any other. Under this model the recombination fraction between two loci is simply <span class="mono">d/100</span> and never needs a Haldane correction. The Haldane option is there for comparison; it will overestimate double crossovers in worms.</p>
+      <p><strong>Screening on a marker.</strong> A locus marked fluorescent is used to pre-sort F2 at the dissecting scope. The criterion is derived from what you asked for, so it is always a necessary condition for the target and can never throw away a worm you wanted: if you want the allele, you keep the glowing worms; if you want it gone, you keep the dark ones. "Glows if carried" treats homozygotes and heterozygotes as indistinguishable, which is the honest default for most single-copy knock-ins; "hom brighter than het" assumes you can call copy number by eye, which is realistic for bright arrays and integrated multi-copy lines but not for every knock-in.</p>
+      <p><strong>What is not modelled.</strong> Balancers are treated only as ordinary loci — set the interval distance to 0 cM to represent suppressed recombination, and tick hom. lethal for a lethal balancer. Male mating efficiency, brood size, self-progeny contamination on the cross plate, dominance, penetrance, maternal effect and any selection acting on F2 classes are all outside the calculation.</p>
+      <p><strong>bp → cM.</strong> Worm chromosomes have non-recombining tips, high-recombination arms and a low-recombination central cluster, so base pairs are a poor proxy for map distance. The converter below uses a per-chromosome three-domain approximation: non-recombining tips, a central cluster taking a set share of the 50 cM, and arms sharing the rest in proportion to their physical length. It is an estimate for planning, not a lookup — where the answer matters, take the genetic position from the gene's WormBase page and enter cM directly.</p>
+      <table class="dom">
+        <thead><tr><th>Chr</th><th>Length (Mb)</th><th>Tip (Mb)</th><th>Centre starts (Mb)</th><th>Centre ends (Mb)</th><th>Centre share of map</th></tr></thead>
+        <tbody id="dombody"></tbody>
+      </table>
+    </div>
+  </details>
+  <footer>Recombination domain structure after Rockman &amp; Kruglyak (2009) PLoS Genet 5:e1000419; obligate single crossover per bivalent after Hammarlund et al. (2005) and Tsai et al. (2008). Everything runs in your browser; nothing is uploaded.</footer>
+</section>
+
+</div>
+
+<footer class="bt-foot">
+  <div>BenchTools &middot; runs entirely in your browser</div>
+  <div><a href="https://github.com/omidalam/benchtools">Source on GitHub</a></div>
+</footer>
+
+<script>
+"use strict";
+
+/* ---------------------------------------------------------------- constants */
+const CHROMS = ["I","II","III","IV","V","X"];
+const CHR_LEN = {I:15072434, II:15279421, III:13783801, IV:17493829, V:20924180, X:17718942};
+const MAP_CM = 50;                        // genetic length of every chromosome
+
+// three-domain bp -> cM approximation, all user-editable
+const DOM = {};
+CHROMS.forEach(c=>{
+  const L = CHR_LEN[c]/1e6;
+  const frac = (c==="X") ? 0.36 : 0.50;   // central cluster as a fraction of physical length
+  DOM[c] = { tip:0.5, cs:+(L/2 - L*frac/2).toFixed(2), ce:+(L/2 + L*frac/2).toFixed(2), share:0.12 };
+});
+
+const GENO = {wt:"+/+", het:"a/+", hom:"a/a"};
+const TARGETS = [["hom","homozygous"],["het","heterozygous"],["carrier","hom or het"],["wt","wild type"],["any","don't care"]];
+const VIS = [["no","not visible"],["dom","glows if carried"],["dosage","hom brighter than het"]];
+const FLUOR = /\b(gfp|yfp|cfp|rfp|mcherry|cherry|scarlet|mkate|tdtomato|tomato|mneongreen|neongreen|venus|citrine|dendra|tagrfp|mruby|wrmscarlet)\b|::(gfp|mcherry|scarlet)/i;
+function looksFluorescent(gene, allele){ return FLUOR.test(gene + " " + allele); }
+
+/* ------------------------------------------------------------------- state */
+let loci = [];      // {id,gene,allele,chr,pos,unit,male,herm,phaseM,phaseH,keep,target,lethal}
+let uid = 1;
+
+/* ------------------------------------------------------------- bp  ->  cM  */
+function bpToCM(chr, bp){
+  const d = DOM[chr], L = CHR_LEN[chr]/1e6, x = Math.min(Math.max(bp/1e6, 0), L);
+  const tip = Math.max(0, d.tip);
+  const aL = Math.max(0, d.cs - tip);               // left arm physical length
+  const aR = Math.max(0, (L - tip) - d.ce);         // right arm physical length
+  const cPhys = Math.max(0, d.ce - d.cs);
+  const cGen = MAP_CM * d.share;
+  const armGen = MAP_CM - cGen;
+  const armTotal = aL + aR || 1;
+  const gL = armGen * aL/armTotal, gR = armGen * aR/armTotal;
+  let cm;
+  if (x <= tip)            cm = 0;
+  else if (x <= d.cs)      cm = gL * (x - tip)/(aL||1);
+  else if (x <= d.ce)      cm = gL + cGen * (x - d.cs)/(cPhys||1);
+  else if (x <= L - tip)   cm = gL + cGen + gR * (x - d.ce)/(aR||1);
+  else                     cm = gL + cGen + gR;
+  return cm - (gL + cGen/2);      // put 0 cM near the middle of the central cluster
+}
+function locusCM(l){
+  if (l.pos === "" || l.pos === null || isNaN(l.pos)) return null;
+  return l.unit === "bp" ? bpToCM(l.chr, l.pos) : l.pos;
+}
+
+/* ----------------------------------------------------------------- parsing */
+function parseGenotype(text){
+  const out = [];
+  text.split(/[;\n]+/).map(s=>s.trim()).filter(Boolean).forEach(tok=>{
+    // strip a leading strain name like "CB1234 " if a gene clearly follows
+    let s = tok.replace(/\s+/g," ").trim();
+    if (!s || s === "+") return;
+
+    // chromosome + optional position: take the LAST roman-numeral match
+    let chr=null, pos="", unit="cM";
+    const re = /\b(I{1,3}|IV|V|X)\b\s*(?:[:@]\s*(-?[\d.,]+)\s*(cM|bp|Mb|mb)?)?/g;
+    let m, last=null;
+    while((m = re.exec(s)) !== null) last = m;
+    if (last){
+      chr = last[1];
+      if (last[2]){
+        const raw = last[2].replace(/,/g,"");
+        let v = parseFloat(raw);
+        const u = (last[3]||"").toLowerCase();
+        if (u === "bp"){ unit="bp"; pos=v; }
+        else if (u === "mb"){ unit="bp"; pos=v*1e6; }
+        else if (u === "cm"){ unit="cM"; pos=v; }
+        else if (Math.abs(v) > 1000){ unit="bp"; pos = v; }        // bare big number = bp
+        else { unit="cM"; pos=v; }
+      }
+      s = s.slice(0, last.index).trim();
+    }
+
+    const het = /\/\s*\+|\+\s*\//.test(s);
+    s = s.replace(/\/\s*\+|\+\s*\//g,"").trim();
+
+    const gm = s.match(/^([A-Za-z0-9\-.]+)\s*(?:\(([^()]*(?:\([^()]*\)[^()]*)*)\))?/);
+    if (!gm || !gm[1]) return;
+    out.push({ gene:gm[1], allele:gm[2]||"", chr:chr, pos:pos, unit:unit, state: het ? "het" : "hom" });
+  });
+  return out;
+}
+
+function mergeParents(maleTxt, hermTxt){
+  const M = parseGenotype(maleTxt), H = parseGenotype(hermTxt);
+  const byGene = new Map();
+  const touch = (e) => {
+    const k = e.gene.toLowerCase();
+    if (!byGene.has(k)) byGene.set(k, {
+      id: uid++, gene:e.gene, allele:e.allele, chr:e.chr||"I", pos:e.pos, unit:e.unit,
+      male:"wt", herm:"wt", phaseM:"A", phaseH:"A", keep:true, target:"hom",
+      vis: looksFluorescent(e.gene, e.allele) ? "dom" : "no", lethal:false
+    });
+    const L = byGene.get(k);
+    if (!L.allele && e.allele){ L.allele = e.allele; if (looksFluorescent(L.gene, L.allele)) L.vis = "dom"; }
+    if (e.chr) L.chr = e.chr;
+    if (e.pos !== "" && e.pos !== undefined && (L.pos === "" || L.pos === undefined)){ L.pos = e.pos; L.unit = e.unit; }
+    return L;
+  };
+  M.forEach(e => { touch(e).male = e.state; });
+  H.forEach(e => { touch(e).herm = e.state; });
+  return [...byGene.values()];
+}
+
+/* ------------------------------------------------------------- haplotypes  */
+// allele coding: 1 = the allele of interest, 0 = wild type
+function hapsFor(state, phase){
+  if (state === "hom") return [1,1];
+  if (state === "wt")  return [0,0];
+  return phase === "B" ? [0,1] : [1,0];     // het: which haplotype carries it
+}
+
+/* gamete distributions -------------------------------------------------- */
+function addTo(map, hap, p){ if (p <= 0) return; const k = hap.join(""); map.set(k, (map.get(k)||0)+p); }
+
+function gametesInterference(A, B, dists){
+  const map = new Map(), n = A.length;
+  if (n === 1){ addTo(map, A, .5); addTo(map, B, .5); return map; }
+  let p = dists.map(d => Math.max(0, d)/MAP_CM);       // P(the single crossover falls in this interval)
+  let sum = p.reduce((a,b)=>a+b, 0);
+  if (sum > 1){ p = p.map(v => v/sum); sum = 1; }
+  const p0 = 1 - sum;
+  addTo(map, A, p0/2); addTo(map, B, p0/2);
+  for (let i=0;i<p.length;i++){
+    if (p[i] <= 0) continue;
+    addTo(map, A, p[i]/4);                              // chromatids not in the crossover
+    addTo(map, B, p[i]/4);
+    addTo(map, A.slice(0,i+1).concat(B.slice(i+1)), p[i]/4);
+    addTo(map, B.slice(0,i+1).concat(A.slice(i+1)), p[i]/4);
+  }
+  return map;
+}
+function gametesHaldane(A, B, dists){
+  const map = new Map(), n = A.length;
+  if (n === 1){ addTo(map, A, .5); addTo(map, B, .5); return map; }
+  const r = dists.map(d => 0.5*(1 - Math.exp(-2*Math.max(0,d)/100)));
+  for (let mask=0; mask < (1<<(n-1)); mask++){
+    let pr = 1;
+    for (let i=0;i<n-1;i++) pr *= (mask>>i & 1) ? r[i] : 1-r[i];
+    for (const start of [0,1]){
+      let cur = start, h = [ start ? B[0] : A[0] ];
+      for (let i=0;i<n-1;i++){ if (mask>>i & 1) cur ^= 1; h.push(cur ? B[i+1] : A[i+1]); }
+      addTo(map, h, pr*0.5);
+    }
+  }
+  return map;
+}
+function gametes(A, B, dists, model){
+  return model === "haldane" ? gametesHaldane(A,B,dists) : gametesInterference(A,B,dists);
+}
+
+/* ------------------------------------------------------------- the engine  */
+function analyse(opts){
+  const active = loci.filter(l => l.gene);
+  if (!active.length) return null;
+
+  const byChr = new Map();
+  active.forEach(l => { if (!byChr.has(l.chr)) byChr.set(l.chr, []); byChr.get(l.chr).push(l); });
+
+  const warnings = [], perChr = [], dblCross = [];
+  let pTarget = 1, pViable = 1, pPass = 1, pF1 = 1, ok = true;
+
+  for (const [chr, listRaw] of byChr){
+    const list = listRaw.slice().sort((a,b)=>{
+      const ca = locusCM(a), cb = locusCM(b);
+      return (ca===null?0:ca) - (cb===null?0:cb);
+    });
+    const n = list.length;
+    const cms = list.map(locusCM);
+    if (n > 1 && cms.some(v => v === null)){
+      warnings.push({t:"warn", m:`${list.filter((l,i)=>cms[i]===null).map(l=>l.gene).join(", ")} on chromosome ${chr} ${n>1?"has":"have"} no map position — treated as 0 cM from the neighbouring locus, i.e. completely linked.`});
+    }
+    const pos = cms.map(v => v === null ? 0 : v);
+    const dists = [];
+    for (let i=0;i<n-1;i++) dists.push(Math.abs(pos[i+1]-pos[i]));
+    const span = dists.reduce((a,b)=>a+b, 0);
+    if (span > MAP_CM){
+      warnings.push({t:"warn", m:`Loci on chromosome ${chr} span ${span.toFixed(1)} cM, more than the 50 cM length of a worm chromosome. Check the positions — distances were rescaled to fit.`});
+    }
+
+    // parental haplotypes
+    const isX = chr === "X";
+    const mA = [], mB = [], hA = [], hB = [];
+    list.forEach(l => {
+      const m = hapsFor(l.male, l.phaseM), h = hapsFor(l.herm, l.phaseH);
+      mA.push(m[0]); mB.push(m[1]);
+      hA.push(h[0]); hB.push(h[1]);
+      if (isX && l.male === "het") warnings.push({t:"warn", m:`${l.gene} is on X and males are hemizygous — the male was read as carrying the allele.`});
+    });
+
+    // gametes reaching the F1 hermaphrodite
+    const patG = isX ? new Map([[ mA.map((v,i)=> (list[i].male!=="wt")?1:0 ).join(""), 1 ]])
+                     : gametes(mA, mB, dists, opts.model);
+    const matG = gametes(hA, hB, dists, opts.model);
+
+    // F1 hermaphrodites, optionally restricted to those carrying every wanted allele
+    const wanted = list.map(l => targetOf(l, opts).needsAllele);
+    let f1 = [], f1pass = 0;
+    for (const [kp, pp] of patG) for (const [km, pm] of matG){
+      const P = [...kp].map(Number), M = [...km].map(Number), w = pp*pm;
+      let pass = true;
+      if (opts.f1mode === "carrier")
+        for (let i=0;i<n;i++) if (wanted[i] && !(P[i]||M[i])) { pass = false; break; }
+      if (pass){ f1.push({P, M, w}); f1pass += w; }
+    }
+    if (f1pass <= 0){
+      ok = false;
+      warnings.push({t:"warn", m:`No F1 from this cross can carry every allele you want on chromosome ${chr}. Check the parent genotypes — an allele you want may not be present in either parent.`});
+      perChr.push({chr, list, dists, pT:0, pV:1, pP:1, f1:0, classes:[]});
+      pTarget = 0; pPass = 0; continue;
+    }
+
+    // F2 = self-progeny of that F1
+    const classes = new Map();
+    for (const f of f1){
+      const g = gametes(f.P, f.M, dists, opts.model), w = f.w/f1pass;
+      for (const [k1,p1] of g) for (const [k2,p2] of g){
+        const dose = [];
+        for (let i=0;i<n;i++) dose.push(Number(k1[i]) + Number(k2[i]));
+        const key = dose.join("");
+        classes.set(key, (classes.get(key)||0) + w*p1*p2);
+      }
+    }
+
+    let pT = 0, pV = 0, pP = 0;
+    const crit = list.map(l => visCriterion(l, opts));
+    for (const [key, p] of classes){
+      const dose = [...key].map(Number);
+      const viable = !list.some((l,i) => l.lethal && dose[i] === 2);
+      if (!viable) continue;
+      pV += p;
+      const seen = crit.every((f,i) => !f || f(dose[i]));
+      if (seen) pP += p;
+      if (list.every((l,i) => matches(dose[i], targetOf(list[i], opts).want))) pT += p;
+    }
+    pTarget *= pT; pViable *= pV; pPass *= pP; pF1 *= f1pass;
+    if (pT === 0 && f1pass > 0){
+      const clash = list.filter(l => l.lethal && targetOf(l, opts).want === "hom");
+      if (clash.length)
+        warnings.push({t:"warn", m:`${clash.map(label).join(" and ")} is marked homozygous lethal but you have asked for it homozygous, so no viable F2 can have that genotype. Ask for it heterozygous instead, or untick hom. lethal.`});
+      else dblCross.push(chr);
+    }
+    perChr.push({chr, list, dists, pT, pV, pP, f1:f1pass,
+      classes:[...classes.entries()].map(([k,p])=>({key:k,p})).sort((a,b)=>b.p-a.p)});
+  }
+
+  return {perChr, pTarget, pViable, pPass, pF1, ok, warnings, dblCross};
+}
+
+function targetOf(l, opts){
+  const want = l.keep ? l.target : opts.untick;
+  return { want, needsAllele: want === "hom" || want === "het" || want === "carrier" };
+}
+// What you can select on down the dissecting scope, derived from what you want.
+// Always a necessary condition for the target, so picking on it never discards a winner.
+function visCriterion(l, opts){
+  const vis = l.vis || "no";
+  if (vis === "no") return null;
+  const want = targetOf(l, opts).want;
+  if (want === "any") return null;
+  if (want === "wt") return d => d === 0;
+  if (vis === "dosage"){
+    if (want === "hom") return d => d === 2;
+    if (want === "het") return d => d === 1;
+    return d => d >= 1;
+  }
+  return d => d >= 1;            // glows if carried: hom and het look the same
+}
+function matches(dose, want){
+  if (want === "any") return true;
+  if (want === "hom") return dose === 2;
+  if (want === "het") return dose === 1;
+  if (want === "wt")  return dose === 0;
+  if (want === "carrier") return dose >= 1;
+  return true;
+}
+
+/* ------------------------------------------------------------------- view  */
+const $ = id => document.getElementById(id);
+
+function renderLoci(){
+  const body = $("locibody");
+  body.innerHTML = "";
+  $("lociempty").hidden = loci.length > 0;
+  loci.forEach(l => {
+    const tr = document.createElement("tr");
+    const needsPos = (l.pos === "" || l.pos === null || isNaN(l.pos)) &&
+                     loci.filter(o => o.chr === l.chr).length > 1;
+    if (needsPos) tr.className = "needspos";
+
+    const label = l.allele ? `${l.gene}(${l.allele})` : l.gene;
+    const sameChrM = loci.filter(o => o.chr === l.chr && o.male === "het").length > 1;
+    const sameChrH = loci.filter(o => o.chr === l.chr && o.herm === "het").length > 1;
+    const showPhase = (l.male === "het" && sameChrM) || (l.herm === "het" && sameChrH);
+
+    tr.innerHTML = `
+      <td class="keep"><input type="checkbox" data-f="keep" ${l.keep?"checked":""} aria-label="Keep ${label}"></td>
+      <td><input class="gene mono" type="text" data-f="label" value="${esc(label)}" aria-label="Gene and allele"></td>
+      <td><select data-f="chr">${CHROMS.map(c=>`<option ${c===l.chr?"selected":""}>${c}</option>`).join("")}</select></td>
+      <td><input class="pos" type="text" inputmode="decimal" data-f="pos" value="${l.pos===""||l.pos===null?"":l.pos}" placeholder="—" aria-label="Map position"></td>
+      <td><select data-f="unit"><option value="cM" ${l.unit==="cM"?"selected":""}>cM</option><option value="bp" ${l.unit==="bp"?"selected":""}>bp</option></select></td>
+      <td><select data-f="male">${stateOpts(l.male, l.chr==="X" ? ["wt","hom"] : ["wt","het","hom"], l.chr==="X")}</select></td>
+      <td><select data-f="herm">${stateOpts(l.herm, ["wt","het","hom"], false)}</select></td>
+      <td>${showPhase ? `<select data-f="phase">
+            <option value="A" ${(l.phaseM==="A"&&l.phaseH==="A")?"selected":""}>cis A</option>
+            <option value="B" ${(l.phaseM==="B"||l.phaseH==="B")?"selected":""}>cis B</option></select>` : `<span class="hint" style="margin:0">—</span>`}</td>
+      <td><select data-f="target" ${l.keep?"":"disabled"}>${TARGETS.map(([v,t])=>`<option value="${v}" ${v===l.target?"selected":""}>${t}</option>`).join("")}</select></td>
+      <td><select data-f="vis">${VIS.map(([v,t])=>`<option value="${v}" ${v===(l.vis||"no")?"selected":""}>${t}</option>`).join("")}</select></td>
+      <td class="keep"><input type="checkbox" data-f="lethal" ${l.lethal?"checked":""} aria-label="Homozygous lethal"></td>
+      <td><button class="del" type="button" title="Remove this locus">×</button></td>`;
+
+    tr.querySelectorAll("[data-f]").forEach(el => {
+      el.addEventListener("change", e => {
+        const f = el.dataset.f;
+        if (f === "keep")        l.keep = el.checked;
+        else if (f === "lethal") l.lethal = el.checked;
+        else if (f === "label"){ const p = el.value.match(/^([^(]+)(?:\(([^)]*)\))?/); l.gene = (p&&p[1]||"").trim(); l.allele = (p&&p[2]||"").trim(); }
+        else if (f === "pos")    l.pos = el.value.trim() === "" ? "" : parseFloat(el.value.replace(/,/g,""));
+        else if (f === "phase"){ if (l.male === "het") l.phaseM = el.value; if (l.herm === "het") l.phaseH = el.value; }
+        else                     l[f] = el.value;
+        if (l.chr === "X" && l.male === "het") l.male = "hom";
+        refresh();
+      });
+    });
+    tr.querySelector("button.del").addEventListener("click", () => {
+      loci = loci.filter(o => o.id !== l.id); refresh();
+    });
+    body.appendChild(tr);
+  });
+}
+function stateOpts(cur, allowed, hemi){
+  const txt = {wt: hemi ? "+ (0)" : "+/+", het:"a/+", hom: hemi ? "a (0)" : "a/a"};
+  return allowed.map(v => `<option value="${v}" ${v===cur?"selected":""}>${txt[v]}</option>`).join("");
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function label(l){ return l.allele ? `${l.gene}(${l.allele})` : l.gene; }
+
+/* map ------------------------------------------------------------------- */
+function renderMap(res){
+  const host = $("map"); host.innerHTML = "";
+  if (!res){ $("mapsec").hidden = true; return; }
+  $("mapsec").hidden = false;
+  const W = 1000, H = 56, x0 = 26, x1 = W-26, span = x1-x0;
+  const toX = cm => x0 + span * (Math.max(-25, Math.min(25, cm)) + 25) / 50;
+
+  res.perChr.forEach(c => {
+    const div = document.createElement("div"); div.className = "chrrow";
+    const dd = c.dists.map((d,i)=>`${label(c.list[i])}↔${label(c.list[i+1])} ${d.toFixed(1)} cM (r = ${rOf(d).toFixed(3)})`);
+    div.innerHTML = `<div class="chrhead"><span class="chrname">${c.chr}</span>
+      <span class="chrnote">${dd.length ? dd.join(" · ") : "single locus — segregates independently"}</span></div>`;
+
+    const cmsRaw = c.list.map(locusCM);
+    const pts = c.list.map((l,i) => ({l, cm: cmsRaw[i] === null ? 0 : cmsRaw[i]}));
+    const cFrac = (c.chr === "X" ? 0.36 : 0.50);
+    const cHalf = 25 * cFrac * 1.0;  // centre band, drawn on the 50 cM scale
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Map of chromosome ${c.chr}">`;
+    svg += `<rect x="${x0}" y="18" width="${span}" height="12" rx="6" fill="var(--track)"/>`;
+    svg += `<rect x="${toX(-cHalf)}" y="18" width="${toX(cHalf)-toX(-cHalf)}" height="12" fill="var(--centre)"/>`;
+    for (let t=-20;t<=20;t+=10)
+      svg += `<line x1="${toX(t)}" y1="32" x2="${toX(t)}" y2="36" stroke="var(--line)" stroke-width="1"/>`
+           + `<text x="${toX(t)}" y="48" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="IBM Plex Mono, monospace">${t}</text>`;
+    pts.forEach((p,i) => {
+      const x = toX(p.cm), up = i % 2 === 0, glows = (p.l.vis || "no") !== "no";
+      svg += `<line x1="${x}" y1="${up?6:30}" x2="${x}" y2="${up?24:42}" stroke="var(--pin)" stroke-width="2"/>`
+           + (glows ? `<circle cx="${x}" cy="24" r="6.5" fill="none" stroke="var(--hit)" stroke-width="1.5"/>` : "")
+           + `<circle cx="${x}" cy="24" r="3.5" fill="${glows ? "var(--hit)" : "var(--pin)"}"/>`
+           + `<text x="${x}" y="${up?4:52}" text-anchor="middle" font-size="11" fill="var(--ink)" font-family="IBM Plex Mono, monospace">${esc(label(p.l))}</text>`;
+    });
+    svg += `</svg>`;
+    div.innerHTML += svg;
+    host.appendChild(div);
+  });
+}
+function rOf(d){ const m = $("model").value;
+  return m === "haldane" ? 0.5*(1-Math.exp(-2*d/100)) : Math.min(0.5, d/100); }
+
+/* results --------------------------------------------------------------- */
+function renderResults(res, opts){
+  if (!res){ $("resultsec").hidden = true; return; }
+  $("resultsec").hidden = false;
+
+  const p = res.pViable > 0 ? res.pTarget/res.pViable : 0;
+  const conf = parseFloat($("conf").value);
+  const need = p > 0 ? Math.ceil(Math.log(1-conf)/Math.log(1-p)) : Infinity;
+
+  const visLoci = loci.filter(l => l.gene && visCriterion(l, opts));
+  const hasVis = visLoci.length > 0;
+  const pass = res.pViable > 0 ? res.pPass/res.pViable : 0;     // fraction of viable F2 worth picking
+  const pGivenPass = res.pPass > 0 ? res.pTarget/res.pPass : 0; // odds once you've picked on the marker
+  const pick = isFinite(need) ? Math.ceil(need * pass) : Infinity;
+
+  $("readout").innerHTML = `
+    <div class="bignum">
+      <div class="n">${p > 0 ? "1 in " + fmt(1/p) : "not possible"}</div>
+      <div class="cap">${p > 0
+        ? `of viable F2 have the genotype you asked for (p = ${p.toExponential(2)})`
+        : `no F2 from this cross can have the genotype you asked for`}</div>
+    </div>
+    <div class="stat"><div class="v">${isFinite(need) ? fmt(need) : "—"}</div>
+      <div class="k">F2 to ${hasVis ? "look at" : "pick"} for a ${Math.round(conf*100)}% chance of at least one</div></div>
+    ${hasVis ? `
+    <div class="stat"><div class="v">${isFinite(pick) ? fmt(pick) : "—"}</div>
+      <div class="k">of those worth picking — the rest are wrong under the scope</div></div>
+    <div class="stat"><div class="v">${pGivenPass > 0 ? "1 in " + fmt(1/pGivenPass) : "—"}</div>
+      <div class="k">odds among the worms you picked, so that's your genotyping load</div></div>` : ""}
+    <div class="stat"><div class="v">${(res.pF1*100).toFixed(res.pF1<0.1?1:0)}%</div>
+      <div class="k">of F1 cross-progeny are usable${opts.f1mode==="carrier"?" (carry every wanted allele)":""}</div></div>`;
+
+  // notes
+  const notes = [];
+  res.perChr.forEach(c => {
+    if (c.list.length < 2) return;
+    const tight = c.dists.filter(d => d > 0 && d < 5);
+    const zero  = c.dists.filter(d => d === 0);
+    const names = c.list.map(label).join(", ");
+    if (zero.length)
+      notes.push({t:"warn", m:`${names} on ${c.chr} are at 0 cM from each other. If the wanted alleles are on opposite homologues you will never recover the recombinant; if they are already in cis, they travel together and cost you nothing.`});
+    else if (tight.length){
+      const share = c.pV > 0 ? c.pT/c.pV : 0;
+      notes.push({t:"warn", m:`Tight linkage on ${c.chr}: ${c.dists.map(d=>d.toFixed(1)).join(" and ")} cM.` +
+        (share > 0 ? ` Chromosome ${c.chr} alone contributes 1 in ${fmt(1/share)} to the total — this is where the screening burden is.` : "")});
+    }
+  });
+  if (typeof isExample !== "undefined" && isExample)
+    notes.push({t:"", m:`This is the worked example: two wanted alleles 3.9 cM apart on chromosome I, in repulsion, one from each parent. The map positions are invented to show what tight repulsion linkage costs you — replace them with real genetic positions before trusting a number.`});
+  const single = res.perChr.every(c => c.list.length === 1);
+  if (single && res.pTarget > 0)
+    notes.push({t:"good", m:`Every locus is on a different chromosome, so they assort independently and the answer is the plain Mendelian product.`});
+  if (hasVis && pass > 0 && pass < 1){
+    notes.push({t:"good", m:`Picking on ${visLoci.map(label).join(" and ")} at the scope throws away ${((1-pass)*100).toFixed(0)}% of the F2 before you genotype anything — a ${fmt(1/pass)}-fold cut in plates and PCRs, with no risk of losing a winner.`});
+  }
+  visLoci.filter(l => (l.vis || "no") === "dom" && targetOf(l, opts).want === "hom").forEach(l => {
+    notes.push({t:"", m:`${label(l)} glows in both homozygotes and heterozygotes, so the scope can only get you from 1 in 4 to 1 in 3 on that locus. If the homozygote is visibly brighter, or you are happy to score the next generation for non-segregation, set it to "hom brighter than het" and see what that buys you.`});
+  });
+  const crossMarker = loci.find(l => l.gene && (l.vis||"no") !== "no" && l.male !== "wt" && l.herm === "wt" && l.chr !== "X");
+  if (crossMarker)
+    notes.push({t:"", m:`${label(crossMarker)} comes from the male only, so glowing F1 are cross-progeny — use it to avoid picking the hermaphrodite's self-progeny by mistake.`});
+  (res.dblCross || []).forEach(chr => {
+    notes.push({t:"warn", m:`The arrangement you want on chromosome ${chr} needs two crossovers in one meiosis. Worms have essentially complete interference — one crossover per bivalent — so a single self generation will not give it to you, which is why the probability is zero rather than merely small. Switch to the Haldane model to see the vanishingly small no-interference estimate, or build it in stages: recover one recombinant chromosome, make it homozygous, then cross in the next allele.`});
+  });
+  res.warnings.forEach(w => notes.push(w));
+  if (opts.f1mode === "carrier" && res.pF1 < 1)
+    notes.push({t:"", m:`Only F1 that carry every wanted allele are counted. Pick ${Math.ceil(3/res.pF1)} or so F1 cross-progeny to be reasonably sure of having several usable ones, and pool F2 across their broods.`});
+  if (isFinite(need) && need > 400)
+    notes.push({t:"", m:`${fmt(need)} F2 is a lot of picking. Consider building the strain in two steps — fix the linked pair first, confirm it, then bring in the unlinked loci — or use a visible or drug-selectable marker to enrich before genotyping.`});
+  $("notes").innerHTML = notes.map(n => `<li class="${n.t}">${esc(n.m)}</li>`).join("");
+
+  // F2 class table
+  const active = loci.filter(l => l.gene);
+  let combos = [{g:[], p:1}];
+  res.perChr.forEach(c => {
+    const next = [];
+    c.classes.slice(0, 12).forEach(cl => combos.forEach(b => {
+      next.push({ g: b.g.concat(c.list.map((l,i)=>({l, dose:Number(cl.key[i])}))), p: b.p*cl.p });
+    }));
+    combos = next.sort((a,b)=>b.p-a.p).slice(0, 60);
+  });
+  const rows = combos.filter(c => c.p > 1e-9).slice(0, 10).map(c => {
+    const viable = !c.g.some(x => x.l.lethal && x.dose === 2);
+    const hit = viable && c.g.every(x => matches(x.dose, targetOf(x.l, opts).want));
+    const seen = viable && c.g.every(x => { const f = visCriterion(x.l, opts); return !f || f(x.dose); });
+    const gtxt = c.g.map(x => {
+      const a = label(x.l);
+      return x.dose === 2 ? `${a}/${a}` : x.dose === 1 ? `${a}/+` : `+/+`;
+    }).join("  ;  ");
+    return `<tr class="${hit?"target":""}"><td class="g">${esc(gtxt)}</td>
+      <td class="num">${(c.p*100).toFixed(c.p<0.001?3:2)}%</td>
+      <td class="num">${c.p>0?"1 in "+fmt(1/c.p):"—"}</td>
+      ${hasVis ? `<td>${!viable ? "—" : seen ? "pick" : "skip"}</td>` : ""}
+      <td>${!viable ? "inviable" : hit ? "what you want" : ""}</td></tr>`;
+  }).join("");
+  $("classwrap").innerHTML = `<table class="classes">
+    <thead><tr><th>Most common F2 genotype classes</th><th class="num">Frequency</th><th class="num">Odds</th>${hasVis?"<th>Scope</th>":""}<th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+function fmt(n){
+  if (!isFinite(n)) return "—";
+  if (n >= 1000) return Math.round(n).toLocaleString();
+  if (n >= 100)  return String(Math.round(n));
+  if (n >= 10)   return n.toFixed(0);
+  return n.toFixed(1);
+}
+
+/* ------------------------------------------------------------------ wiring */
+function opts(){ return {model:$("model").value, untick:$("untick").value, f1mode:$("f1mode").value}; }
+function refresh(){
+  renderLoci();
+  const o = opts();
+  const res = loci.filter(l=>l.gene).length ? analyse(o) : null;
+  renderMap(res);
+  renderResults(res, o);
+  save();
+}
+
+$("parse").addEventListener("click", () => {
+  const merged = mergeParents($("male").value, $("herm").value);
+  if (!merged.length){ alert("Nothing recognisable in those genotypes. Try a line like:  unc-119(ed3) III"); return; }
+  loci = merged; refresh();
+  $("locibody").parentElement.classList.add("flash");
+  setTimeout(()=>$("locibody").parentElement.classList.remove("flash"), 600);
+});
+$("addrow").addEventListener("click", () => {
+  loci.push({id:uid++, gene:"gene-1", allele:"", chr:"I", pos:"", unit:"cM",
+    male:"hom", herm:"wt", phaseM:"A", phaseH:"A", keep:true, target:"hom", vis:"no", lethal:false});
+  refresh();
+});
+$("clear").addEventListener("click", () => { loci = []; $("male").value=""; $("herm").value=""; refresh(); });
+var isExample = false;
+$("example").addEventListener("click", () => {
+  $("male").value = "geneA(ok1234) I:2.5; him-5(e1490) V:6.8";
+  $("herm").value = "geneB(syb9001[geneB::gfp]) I:-1.4; unc-119(ed3) III:2.3";
+  loci = mergeParents($("male").value, $("herm").value);
+  loci.forEach(l => { if (l.gene === "him-5") l.keep = false; });
+  isExample = true;
+  refresh();
+});
+["male","herm"].forEach(id => $(id).addEventListener("input", () => { isExample = false; }));
+["model","untick","f1mode","conf"].forEach(id => $(id).addEventListener("change", refresh));
+
+$("copy").addEventListener("click", async () => {
+  const o = opts(), res = analyse(o);
+  if (!res) return;
+  const p = res.pViable > 0 ? res.pTarget/res.pViable : 0;
+  const conf = parseFloat($("conf").value);
+  const need = p > 0 ? Math.ceil(Math.log(1-conf)/Math.log(1-p)) : Infinity;
+  const vis = loci.filter(l => l.gene && visCriterion(l, o));
+  const pass = res.pViable > 0 ? res.pPass/res.pViable : 0;
+  const lines = [
+    `Cross: ♂ ${$("male").value.replace(/\n/g,"; ") || "(see loci)"}  ×  ⚥ ${$("herm").value.replace(/\n/g,"; ") || "(see loci)"}`,
+    `Target F2: ${loci.filter(l=>l.keep).map(l=>`${label(l)} ${l.target}`).join("; ")}`,
+    `Model: ${o.model === "haldane" ? "Haldane, no interference" : "complete interference, one crossover per bivalent"}`,
+    ...res.perChr.filter(c=>c.list.length>1).map(c =>
+      `Chr ${c.chr}: ${c.list.map(label).join(" – ")}, intervals ${c.dists.map(d=>d.toFixed(1)+" cM").join(", ")}`),
+    `P(target | viable F2) = ${p.toExponential(3)}  →  1 in ${fmt(1/p)}`,
+    `Screen ${fmt(need)} F2 for ${Math.round(conf*100)}% confidence.`,
+    ...(vis.length ? [
+      `Scope selection on ${vis.map(label).join(", ")}: pick ${(pass*100).toFixed(1)}% of them (${fmt(Math.ceil(need*pass))} worms), among which the target is 1 in ${fmt(res.pPass/res.pTarget)}.`
+    ] : []),
+    `Usable F1 cross-progeny: ${(res.pF1*100).toFixed(1)}%`
+  ];
+  try { await navigator.clipboard.writeText(lines.join("\n"));
+    $("copy").textContent = "Copied"; setTimeout(()=>$("copy").textContent = "Copy summary for your notebook", 1600);
+  } catch(e){ alert(lines.join("\n")); }
+});
+
+// domain editor
+function renderDomains(){
+  $("dombody").innerHTML = CHROMS.map(c => {
+    const d = DOM[c];
+    return `<tr><td class="mono">${c}</td><td class="mono">${(CHR_LEN[c]/1e6).toFixed(2)}</td>
+      <td><input data-c="${c}" data-k="tip" value="${d.tip}"></td>
+      <td><input data-c="${c}" data-k="cs" value="${d.cs}"></td>
+      <td><input data-c="${c}" data-k="ce" value="${d.ce}"></td>
+      <td><input data-c="${c}" data-k="share" value="${d.share}"></td></tr>`;
+  }).join("");
+  $("dombody").querySelectorAll("input").forEach(el => el.addEventListener("change", () => {
+    const v = parseFloat(el.value);
+    if (!isNaN(v)) DOM[el.dataset.c][el.dataset.k] = v;
+    save(); refresh();
+  }));
+}
+
+/* per-browser convenience only */
+function save(){
+  try {
+    localStorage.setItem("crossbench.v1", JSON.stringify({
+      loci, male:$("male").value, herm:$("herm").value, DOM,
+      model:$("model").value, untick:$("untick").value, f1mode:$("f1mode").value, conf:$("conf").value
+    }));
+  } catch(e){}
+}
+function load(){
+  try {
+    const raw = localStorage.getItem("crossbench.v1");
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (Array.isArray(s.loci)) { loci = s.loci; uid = loci.reduce((m,l)=>Math.max(m, l.id||0), 0) + 1; }
+    if (typeof s.male === "string") $("male").value = s.male;
+    if (typeof s.herm === "string") $("herm").value = s.herm;
+    if (s.DOM) CHROMS.forEach(c => { if (s.DOM[c]) Object.assign(DOM[c], s.DOM[c]); });
+    ["model","untick","f1mode","conf"].forEach(k => { if (s[k]) $(k).value = s[k]; });
+  } catch(e){}
+}
+
+load();
+renderDomains();
+refresh();
+</script>
+</body>
+</html>
