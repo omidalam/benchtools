@@ -69,15 +69,15 @@
   body{margin:0;background:var(--ink);color:var(--text);font-family:var(--sans);
        display:flex;flex-direction:column;overflow:hidden}
 
-  header{background:var(--panel);border-bottom:1px solid var(--line);padding:10px 14px 0;flex:0 0 auto}
-  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  header{background:var(--panel);border-bottom:1px solid var(--line);padding:7px 12px;flex:0 0 auto}
+  .bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
   .brand{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
          color:var(--accent-text);margin-right:6px;white-space:nowrap}
   .brand span{color:var(--muted)}
 
   button,select,label.file{font-family:var(--mono);font-size:11px;letter-spacing:.08em;
     text-transform:uppercase;background:var(--ctl);color:var(--text);border:1px solid var(--line);
-    border-radius:3px;padding:7px 11px;cursor:pointer;line-height:1}
+    border-radius:3px;padding:6px 10px;cursor:pointer;line-height:1}
   button:hover:not(:disabled),label.file:hover,select:hover{border-color:var(--ctl-hover-line);background:var(--ctl-hover)}
   button:disabled{opacity:.3;cursor:not-allowed}
   button.primary{background:var(--pri);border-color:var(--pri-line);color:var(--pri-text)}
@@ -85,17 +85,18 @@
   button.tgl.on{background:var(--pri);border-color:var(--pri-line);color:var(--pri-text)}
   :focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
   input[type=file]{display:none}
-  .sep{width:1px;height:22px;background:var(--line);margin:0 3px}
+  .sep{width:1px;height:20px;background:var(--line);margin:0 2px}
   .chk{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;
        letter-spacing:.08em;text-transform:uppercase;color:var(--muted);cursor:pointer;user-select:none}
   .chk input{accent-color:var(--accent);margin:0}
 
 
-  main{flex:1 1 auto;overflow:auto;padding:22px;display:flex;justify-content:center;
+  main{flex:1 1 auto;overflow:auto;padding:12px;display:flex;justify-content:center;
        align-items:flex-start;background:var(--mat)}
-  .wrap{display:flex;flex-direction:column;max-width:100%;min-width:0;
+  .wrap{display:flex;flex-direction:column;align-items:center;max-width:100%;min-width:0;
         box-shadow:0 0 0 1px var(--line),0 18px 50px var(--lift)}
-  .stage{position:relative;line-height:0;overflow:hidden}
+  .wrap > :not(.stage){width:100%}
+  .stage{position:relative;line-height:0;overflow:hidden;flex:0 0 auto}
   .stage canvas{display:block;width:100%;height:auto}
   .ovl{position:absolute;inset:0;line-height:normal;cursor:crosshair}
 
@@ -137,8 +138,8 @@
   /* docked bars below the image: never cover the gel */
   .expo{border-top:1px solid var(--line)}
   .expo[hidden]{display:none}
-  .prompt{display:flex;align-items:center;gap:14px;
-          background:var(--panel);border-top:2px solid var(--accent-text);padding:13px 16px}
+  .prompt{display:flex;align-items:center;gap:13px;
+          background:var(--panel);border-top:2px solid var(--accent-text);padding:9px 14px}
   .prompt .txt{display:flex;flex-direction:column;gap:3px;min-width:0}
   .prompt[hidden]{display:none}
   .prompt .step{flex:0 0 auto;width:27px;height:27px;border-radius:50%;
@@ -178,8 +179,8 @@
         pointer-events:none;z-index:4}
 
   /* size + style controls, pinned under the image */
-  .tools{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
-         background:var(--panel);border-top:1px solid var(--line);padding:8px 10px}
+  .tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+         background:var(--panel);border-top:1px solid var(--line);padding:6px 9px}
   .tools.off .grp{opacity:.35;pointer-events:none}
   .grp{display:flex;align-items:center;gap:6px}
   .tools input[type=range]{width:150px;accent-color:var(--accent);margin:0}
@@ -236,7 +237,7 @@
   .tour .n{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted);margin-right:auto}
   @media (max-width:560px){ .tour .card{width:calc(100vw - 20px)} }
 
-  footer{flex:0 0 auto;background:var(--panel);border-top:1px solid var(--line);padding:7px 14px;
+  footer{flex:0 0 auto;background:var(--panel);border-top:1px solid var(--line);padding:5px 12px;
          font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;
          justify-content:space-between;gap:14px}
   .keys span{color:var(--text)}
@@ -382,9 +383,8 @@
       <div class="sep"></div>
       <div class="grp">
         <button id="exReset">Reset</button>
-        <button id="exDone" class="primary">Done</button>
+        <button id="exDone" class="primary" title="Brightness and contrast are baked into the saved PNG">Done</button>
       </div>
-      <div class="count">baked into the saved PNG</div>
     </div>
 
     <div class="prompt" id="batchPrompt" hidden>
@@ -784,6 +784,7 @@ function buildWorking(){
 }
 
 function enterPrep(fresh){
+  if(mode==='batch') endBatch();               // don't leave a placement half-done
   mode='prep';
   if(fresh) prep={quarter:0, fine:0, crop:{x:0,y:0,w:1,h:1}, line:false};
   else{
@@ -1128,12 +1129,18 @@ function exSync(){
 $('exB').addEventListener('input', e=>{ ex.b=+e.target.value; exSync(); exLive(); });
 $('exC').addEventListener('input', e=>{ ex.c=+e.target.value; exSync(); exLive(); });
 $('exReset').onclick=()=>{ ex={b:0,c:0}; exSync(); applyFx(); setStatus('Exposure reset.'); };
-$('exDone').onclick =()=>{ $('expoBar').hidden=true; exSync(); };
+$('exDone').onclick =()=>{ showExpo(false); };
 $('expo').onclick=()=>{
   if(!hasImage || mode!=='label') return;
-  $('expoBar').hidden=!$('expoBar').hidden;
-  exSync();
+  showExpo($('expoBar').hidden);
 };
+/* a docked bar changes how much room the gel has, so refit after every
+   show or hide — otherwise the page just starts scrolling instead.      */
+function showExpo(on){
+  $('expoBar').hidden=!on;
+  exSync();
+  fitView(); rescale();
+}
 
 $('bw').onclick  = ()=>{ bw=!bw;  $('bw').classList.toggle('on',bw);   applyFx(); };
 $('inv').onclick = ()=>{ inv=!inv; $('inv').classList.toggle('on',inv); applyFx(); };
@@ -1156,8 +1163,14 @@ function measureFit(){
   /* "Does it still scroll?" is the real question, and asking the scroller
      itself folds in the toolbar's rewrapping, the crop handles' overhang and
      sub-pixel rounding that measuring the pieces separately would miss.     */
+  /* The toolbar wraps by width, so tying it to a narrow gel costs rows and
+     those rows shrink the gel again. Give the bars their own width and the
+     loop settles with a far larger image.                                   */
+  const barW=Math.floor(Math.min(availW, 760));
   for(let i=0;i<8;i++){
-    wrap.style.width=Math.floor(w)+'px';
+    const ww=Math.floor(w);
+    stage.style.width=ww+'px';
+    wrap.style.width=Math.max(ww, barW)+'px';
     const over=mainEl.scrollHeight-mainEl.clientHeight;
     if(over<=0) break;
     w=Math.max(120, w-Math.max(1, over*vw/vh));
@@ -1610,7 +1623,9 @@ function sayStep(n, text, hint){
   $('batchStep').textContent=n;
   $('batchSay').textContent=text;
   $('batchHint').textContent=hint||'';
+  const fresh=$('batchPrompt').hidden;
   $('batchPrompt').hidden=false;
+  if(fresh){ fitView(); rescale(); }           // only the first step changes the height
 }
 
 function startBatch(){
@@ -1623,6 +1638,7 @@ function startBatch(){
   ovl.style.cursor='crosshair';
   const n=lines.filter(t=>t.trim()).length;
   $('expoBar').hidden=true;
+  $('tools').hidden=true;                      // nothing to act on mid-placement
   sayStep(1, 'Click on the gel where the FIRST label goes',
              `${n} label${n===1?'':'s'} · Esc cancels`);
   setStatus(`Placing ${n} label${n===1?'':'s'}.`);
@@ -1633,6 +1649,8 @@ $('batchStop').onclick=()=>endBatch('Placing cancelled.');
 function endBatch(msg){
   batch=null; mode='label';
   $('batchPrompt').hidden=true;
+  $('tools').hidden=false;
+  fitView(); rescale();
   $('batchGuide').setAttribute('hidden',''); $('batchGuide').textContent='';
   ovl.style.cursor='';
   if(msg) setStatus(msg);
