@@ -154,6 +154,12 @@
   .sw.w{background:#fff;color:#000}
   .sw.r{background:#ff2020;color:#fff}
   .sw.del{color:var(--alert)}
+  .sw.col{padding:0;overflow:hidden;display:block}
+  .sw.col input[type=color]{display:block;width:100%;height:100%;padding:0;border:0;
+    background:none;cursor:pointer;appearance:none;-webkit-appearance:none}
+  .sw.col input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+  .sw.col input[type=color]::-webkit-color-swatch{border:0;border-radius:0}
+  .sw.col input[type=color]::-moz-color-swatch{border:0}
   .sw.ic{display:flex;align-items:center;justify-content:center}
   .sw.ic svg{width:15px;height:15px}
   .sw.ic rect{fill:currentColor;opacity:.8}
@@ -309,6 +315,7 @@
         <button class="sw" id="cAuto" title="Pick from the background">A</button>
         <button class="sw w" id="cWhite" title="White">W</button>
         <button class="sw r" id="cRed" title="Red">R</button>
+        <label class="sw col" id="cCustomWrap" title="Custom colour"><input type="color" id="cCustom" value="#35d0ff"></label>
       </div>
       <div class="sep"></div>
       <div class="grp" id="alignGrp">
@@ -319,6 +326,12 @@
         <button class="sw ic" id="alT" title="Align top edges"><svg viewBox="0 0 16 16"><path d="M2 2.5h12"/><rect x="4" y="4.5" width="3" height="9"/><rect x="9" y="4.5" width="3" height="6"/></svg></button>
         <button class="sw ic" id="alM" title="Centre vertically"><svg viewBox="0 0 16 16"><path d="M2 8h12"/><rect x="4" y="3.5" width="3" height="9"/><rect x="9" y="5" width="3" height="6"/></svg></button>
         <button class="sw ic" id="alB" title="Align bottom edges"><svg viewBox="0 0 16 16"><path d="M2 13.5h12"/><rect x="4" y="2.5" width="3" height="9"/><rect x="9" y="5.5" width="3" height="6"/></svg></button>
+      </div>
+      <div class="sep"></div>
+      <div class="grp" id="distGrp">
+        <span class="cap">Space</span>
+        <button class="sw ic" id="dsH" title="Space evenly across (equal gaps between centres)"><svg viewBox="0 0 16 16"><rect x="1" y="3" width="2.4" height="10"/><rect x="6.8" y="3" width="2.4" height="10"/><rect x="12.6" y="3" width="2.4" height="10"/><path d="M4.6 8h1.2M10.4 8h1.2"/></svg></button>
+        <button class="sw ic" id="dsV" title="Space evenly down (equal gaps between centres)"><svg viewBox="0 0 16 16"><rect x="3" y="1" width="10" height="2.4"/><rect x="3" y="6.8" width="10" height="2.4"/><rect x="3" y="12.6" width="10" height="2.4"/><path d="M8 4.6v1.2M8 10.4v1.2"/></svg></button>
       </div>
       <div class="sep"></div>
       <div class="grp"><button class="sw del" id="del" title="Delete selected labels">&times;</button></div>
@@ -1134,7 +1147,9 @@ $('font').onchange = repaintAll;
 $('bold').onchange = repaintAll;
 
 /* white on a dark gel, red on a light one — sampled under the label itself */
+const isHex = c => typeof c==='string' && /^#[0-9a-f]{6}$/i.test(c);
 function colourOf(l){
+  if(isHex(l.colour))   return l.colour;        // a colour the user picked
   if(l.colour==='white') return '#ffffff';
   if(l.colour==='red')   return '#ff2020';
   return luminance(l) < 118 ? '#ffffff' : '#ff2020';
@@ -1176,8 +1191,28 @@ function boxOf(l){
 
 /* Alignment shifts the anchor by the same delta as the box, so it works the
    same for horizontal, rotated, top- and bottom-anchored labels alike.       */
+/* Even spacing. The outermost two labels stay put and the rest are spread so
+   the gaps between box centres are equal — lanes on a gel are evenly spaced,
+   so centres are what should line up. Shifting the anchor moves the whole box
+   by the same amount at any rotation, exactly as align() relies on.         */
+function distribute(axis){
+  if(sels.length<3) return;
+  const mid = b => axis==='h' ? (b.x0+b.x1)/2 : (b.y0+b.y1)/2;
+  sels.forEach(place);                            // measure what is actually drawn now
+  const set=sels.map(l=>({l, b:boxOf(l)})).sort((a,b)=>mid(a.b)-mid(b.b));
+  const first=mid(set[0].b), last=mid(set[set.length-1].b);
+  const step=(last-first)/(set.length-1);
+  set.forEach((o,i)=>{
+    const d=(first+i*step)-mid(o.b);
+    if(axis==='h') o.l.cx+=d; else o.l.y+=d;
+    place(o.l); paint(o.l);
+  });
+  setStatus(`${sels.length} labels spaced evenly ${axis==='h'?'across':'down'}.`);
+}
+
 function align(mode){
   if(sels.length<2) return;
+  sels.forEach(place);                            // as above: never measure a stale box
   const set=sels.map(l=>({l, b:boxOf(l)}));
   const x0=Math.min(...set.map(o=>o.b.x0)), x1=Math.max(...set.map(o=>o.b.x1));
   const y0=Math.min(...set.map(o=>o.b.y0)), y1=Math.max(...set.map(o=>o.b.y1));
@@ -1244,6 +1279,7 @@ function syncTools(){
   $('count').textContent = n===0 ? 'no labels selected'
                          : n===1 ? '1 label selected' : n+' labels selected';
   $('alignGrp').classList.toggle('dim', n<2);
+  $('distGrp').classList.toggle('dim', n<3);
   if(!primary) return;
   const s=$('size');
   s.max=Math.max(60, Math.round(natH*0.14));
@@ -1251,6 +1287,9 @@ function syncTools(){
   $('r0').classList.toggle('on',  primary.rot===0);
   $('rup').classList.toggle('on', primary.rot===-90);
   $('rdn').classList.toggle('on', primary.rot===90);
+  const custom=isHex(primary.colour);
+  if(custom) $('cCustom').value=primary.colour;
+  $('cCustomWrap').classList.toggle('on', custom);
   $('cAuto').classList.toggle('on',  primary.colour==='auto');
   $('cWhite').classList.toggle('on', primary.colour==='white');
   $('cRed').classList.toggle('on',   primary.colour==='red');
@@ -1346,6 +1385,9 @@ function setColour(mode){
 $('cAuto').onclick =()=>setColour('auto');
 $('cWhite').onclick=()=>setColour('white');
 $('cRed').onclick  =()=>setColour('red');
+$('cCustom').addEventListener('input', e=>setColour(e.target.value));
+$('dsH').onclick=()=>distribute('h');
+$('dsV').onclick=()=>distribute('v');
 $('alL').onclick=()=>align('left');
 $('alC').onclick=()=>align('centre');
 $('alR').onclick=()=>align('right');
@@ -1701,10 +1743,12 @@ const TOUR=[
 
   {sel:'#tools', title:'6 · Size, angle, colour, align',
    html:`<p>Acts on whatever is selected. <b>Size</b> has an <b>all</b> tick to resize every label at once.</p>
-         <p><b>Colour A</b> reads the gel behind each label and picks black or white to suit it,
+         <p><b>Colour A</b> reads the gel behind each label and picks white or red to suit it,
          so labels stay readable over both dark and light backgrounds. <b>W</b> and <b>R</b>
-         force white or red.</p>
-         <p><b>Align</b> needs two or more selected — it lines up their edges or centres.</p>`},
+         force white or red, and the swatch beside them opens a colour picker for anything else.</p>
+         <p><b>Align</b> needs two or more selected — it lines up their edges or centres.
+         <b>Space</b> needs three: it holds the outermost two still and spreads the rest
+         so the gaps are equal.</p>`},
 
   {sel:'#bw', title:'7 · Greyscale &amp; invert',
    html:`<p>Turn a colour scan greyscale, or flip a dark-background gel to bands-on-white
