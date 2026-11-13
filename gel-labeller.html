@@ -134,6 +134,20 @@
   .cropbox i[data-h=se]{right:-7px;bottom:-7px;cursor:nwse-resize}
   .lvl{position:absolute;height:0;border-top:2px dashed var(--accent);
        transform-origin:0 50%;pointer-events:none}
+  /* docked bars below the image: never cover the gel */
+  .expo{border-top:1px solid var(--line)}
+  .expo[hidden]{display:none}
+  .prompt{display:flex;align-items:center;gap:14px;
+          background:var(--panel);border-top:2px solid var(--accent-text);padding:13px 16px}
+  .prompt .txt{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .prompt[hidden]{display:none}
+  .prompt .step{flex:0 0 auto;width:27px;height:27px;border-radius:50%;
+    background:var(--accent-text);color:var(--panel);font-family:var(--mono);
+    font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .prompt .say{font-size:17px;font-weight:600;color:var(--text);line-height:1.3}
+  .prompt .hint{font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+                text-transform:uppercase;color:var(--muted)}
+  .prompt button{margin-left:auto}
   .veil{position:fixed;inset:0;background:var(--dim);display:flex;align-items:center;
         justify-content:center;z-index:50;padding:20px}
   .veil[hidden]{display:none}
@@ -248,6 +262,7 @@
     </select>
     <label class="chk"><input type="checkbox" id="bold"> Bold</label>
     <div class="sep"></div>
+    <button id="expo" class="tgl" disabled title="Adjust brightness and contrast">Exposure</button>
     <button id="bw" class="tgl" disabled title="Convert the gel to greyscale">Black &amp; white</button>
     <button id="inv" class="tgl" disabled title="Invert the gel">Invert</button>
     <div class="sep"></div>
@@ -351,6 +366,35 @@
       <div class="grp"><button class="sw del" id="del" title="Delete selected labels">&times;</button></div>
       <div class="count" id="count">no labels selected</div>
     </div>
+
+    <div class="tools expo" id="expoBar" hidden>
+      <div class="grp">
+        <span class="cap">Brightness</span>
+        <input type="range" id="exB" min="-100" max="100" step="1" value="0">
+        <span class="pt" id="exBv">0</span>
+      </div>
+      <div class="sep"></div>
+      <div class="grp">
+        <span class="cap">Contrast</span>
+        <input type="range" id="exC" min="-100" max="100" step="1" value="0">
+        <span class="pt" id="exCv">0</span>
+      </div>
+      <div class="sep"></div>
+      <div class="grp">
+        <button id="exReset">Reset</button>
+        <button id="exDone" class="primary">Done</button>
+      </div>
+      <div class="count">baked into the saved PNG</div>
+    </div>
+
+    <div class="prompt" id="batchPrompt" hidden>
+      <span class="step" id="batchStep">1</span>
+      <span class="txt">
+        <span class="say" id="batchSay"></span>
+        <span class="hint" id="batchHint"></span>
+      </span>
+      <button id="batchStop">Cancel</button>
+    </div>
   </div>
 </main>
 
@@ -417,7 +461,8 @@ const octx = orig.getContext('2d');
 let natW=0, natH=0, origW=0, origH=0, hasImage=false, edgeRGB=null;
 let geom={angle:0, crop:{x:0,y:0,w:1,h:1}};
 let labels=[], sels=[], primary=null, editing=null, uid=0;
-let bw=false, inv=false, srcFile=null, srcBuf=null, srcInfo=null, srcDpi=null;
+let bw=false, inv=false, srcFile=null, srcBuf=null, srcInfo=null, srcDpi=null, srcName='';
+let ex={b:0, c:0};                                // brightness / contrast, -100..100
 
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const median=a=>{const s=[...a].sort((x,y)=>x-y);return s.length?s[s.length>>1]:0};
@@ -749,7 +794,7 @@ function enterPrep(fresh){
   $('lineBtn').classList.remove('on');
   wrap.classList.add('prepmode');
   $('prepLayer').hidden=false; $('prepTools').hidden=false; $('tools').hidden=true;
-  ['save','clear','cropbtn','batchbtn'].forEach(id=>$(id).disabled=true);
+  ['save','clear','cropbtn','batchbtn','expo'].forEach(id=>$(id).disabled=true);
   /* before drawPrep, so the footer is already its final height when the gel
      is fitted — a longer status line steals a row from the image           */
   setStatus('Drag the frame to crop. Straighten with the slider, or draw a level line along the wells.');
@@ -797,7 +842,7 @@ function applyPrep(){
   mode='label';
   wrap.classList.remove('prepmode');
   $('prepLayer').hidden=true; $('prepTools').hidden=true; $('tools').hidden=false;
-  ['save','clear','cropbtn','batchbtn'].forEach(id=>$(id).disabled=false);
+  ['save','clear','cropbtn','batchbtn','expo'].forEach(id=>$(id).disabled=false);
   fitView(); rescale();                         // the swapped toolbar is a different height
   showFormat();
   if(labels.length){ labels.forEach(l=>{ place(l); paint(l); }); setStatus('Crop updated — labels moved with the gel.'); }
@@ -979,6 +1024,7 @@ async function openFile(file){
   hasImage=true; drop.hidden=true; wrap.hidden=false;
   ['bw','inv'].forEach(id=>$(id).disabled=false);
   srcFile = srcBytes ? new Blob([srcBytes],{type:(meta&&meta.srcType)||'image/png'}) : file;
+  srcName = (meta && meta.srcName) || file.name || '';
   srcBuf  = srcBytes || rawBuf;
   srcInfo = srcBuf ? pngInfo(srcBuf) : null;
   srcDpi  = srcBuf ? sourceDpi(srcBuf) : null;
@@ -991,7 +1037,7 @@ async function openFile(file){
     applyFx();
     rescale();
     showFormat();
-    ['save','clear','cropbtn','batchbtn'].forEach(id=>$(id).disabled=false);
+    ['save','clear','cropbtn','batchbtn','expo'].forEach(id=>$(id).disabled=false);
     restoreLabels(meta);
   }else{
     if(meta) setStatus('This PNG has label positions but no embedded source, so the labels are already part of the picture.');
@@ -1003,6 +1049,8 @@ async function openFile(file){
 function applySettings(m){
   bw  = !!(m.fx && m.fx.bw);  $('bw').classList.toggle('on',bw);
   inv = !!(m.fx && m.fx.inv); $('inv').classList.toggle('on',inv);
+  ex  = {b:(m.fx&&+m.fx.b)||0, c:(m.fx&&+m.fx.c)||0};
+  exSync();
   if(m.font) $('font').value=m.font;
   $('bold').checked=!!m.bold;
   if(m.dpi!==undefined) $('dpi').value=m.dpi;
@@ -1026,14 +1074,37 @@ $('file2').onchange = e => openFile(e.target.files[0]);
 document.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) openFile(f); });
 
 /* -------------------------------------------- greyscale / invert */
+/* Exposure is applied last, after greyscale and invert, so the sliders always
+   act on what is actually on screen: brighter means brighter, whichever way
+   the gel is showing. Contrast pivots about mid grey.                       */
+const exFactor = ()=> ex.c<0 ? 1+ex.c/100 : 1+3*ex.c/100;     // 0 … 1 … 4
+const exOffset = ()=> ex.b/200;                               // -0.5 … +0.5 of range
+const exOn     = ()=> ex.b!==0 || ex.c!==0;
+
+/* Contrast pivots about the gel's own average rather than mid grey. A gel is
+   mostly background, so a mid-grey pivot would crush a dark one to black and
+   blow a light one out; pivoting about the average spreads the bands away
+   from the background instead, which is the point of the control.           */
+function exPivot255(a){
+  let sum=0, n=0;
+  for(let i=0;i<a.length;i+=64){ sum+=a[i]; n++; }          // every 16th pixel
+  return n ? sum/n : 127.5;
+}
+
 function applyFx(){
   if(!hasImage) return;
   pctx.drawImage(src,0,0);
-  if(bw||inv){
+  if(bw||inv||exOn()){
     const img=pctx.getImageData(0,0,natW,natH), a=img.data;
+    const lift=exOn();
     for(let i=0;i<a.length;i+=4){
       if(bw){ const g=(0.299*a[i]+0.587*a[i+1]+0.114*a[i+2])|0; a[i]=a[i+1]=a[i+2]=g; }
       if(inv){ a[i]=255-a[i]; a[i+1]=255-a[i+1]; a[i+2]=255-a[i+2]; }
+    }
+    if(lift){
+      const f=exFactor(), o=exOffset()*255, mid=exPivot255(a);
+      for(let i=0;i<a.length;i+=4)
+        for(let k=0;k<3;k++) a[i+k]=clamp((a[i+k]-mid)*f+mid+o, 0, 255);
     }
     pctx.putImageData(img,0,0);
   }
@@ -1041,6 +1112,29 @@ function applyFx(){
   vctx.drawImage(proc,0,0);
   labels.forEach(paint);                       // an inverted gel flips the automatic colours
 }
+/* a full-resolution repaint per frame at most, so dragging stays smooth */
+let exPending=false;
+function exLive(){
+  if(exPending) return;
+  exPending=true;
+  requestAnimationFrame(()=>{ exPending=false; applyFx(); });
+}
+function exSync(){
+  $('exB').value=ex.b; $('exC').value=ex.c;
+  $('exBv').textContent=(ex.b>0?'+':'')+ex.b;
+  $('exCv').textContent=(ex.c>0?'+':'')+ex.c;
+  $('expo').classList.toggle('on', !$('expoBar').hidden || exOn());
+}
+$('exB').addEventListener('input', e=>{ ex.b=+e.target.value; exSync(); exLive(); });
+$('exC').addEventListener('input', e=>{ ex.c=+e.target.value; exSync(); exLive(); });
+$('exReset').onclick=()=>{ ex={b:0,c:0}; exSync(); applyFx(); setStatus('Exposure reset.'); };
+$('exDone').onclick =()=>{ $('expoBar').hidden=true; exSync(); };
+$('expo').onclick=()=>{
+  if(!hasImage || mode!=='label') return;
+  $('expoBar').hidden=!$('expoBar').hidden;
+  exSync();
+};
+
 $('bw').onclick  = ()=>{ bw=!bw;  $('bw').classList.toggle('on',bw);   applyFx(); };
 $('inv').onclick = ()=>{ inv=!inv; $('inv').classList.toggle('on',inv); applyFx(); };
 
@@ -1326,7 +1420,8 @@ ovl.addEventListener('pointerdown', ev=>{
       batch.p0=p;
       if(batch.lines.length===1){ commitBatch(p,p); return; }
       drawGuide(p,p);
-      setStatus('Now click where the last one goes — hold Shift to keep the line straight. Esc cancels.');
+      sayStep(2, 'Now click where the LAST label goes',
+                 'hold Shift to keep the line straight · Esc cancels');
     }else{
       commitBatch(batch.p0, ev.shiftKey ? snapTo(batch.p0,p) : p);
     }
@@ -1511,6 +1606,13 @@ $('batchText').addEventListener('keydown', e=>{
   if(e.key==='Enter' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); startBatch(); }
 });
 
+function sayStep(n, text, hint){
+  $('batchStep').textContent=n;
+  $('batchSay').textContent=text;
+  $('batchHint').textContent=hint||'';
+  $('batchPrompt').hidden=false;
+}
+
 function startBatch(){
   const lines=batchLines();
   if(!lines.filter(t=>t.trim()).length) return;
@@ -1519,12 +1621,18 @@ function startBatch(){
   batch={lines, rot:+$('batchRot').value, size:batchSize(), p0:null};
   mode='batch';
   ovl.style.cursor='crosshair';
-  setStatus(`Placing ${lines.filter(t=>t.trim()).length} labels — click where the first one goes. Esc cancels.`);
+  const n=lines.filter(t=>t.trim()).length;
+  $('expoBar').hidden=true;
+  sayStep(1, 'Click on the gel where the FIRST label goes',
+             `${n} label${n===1?'':'s'} · Esc cancels`);
+  setStatus(`Placing ${n} label${n===1?'':'s'}.`);
 }
 $('batchGo').onclick=startBatch;
+$('batchStop').onclick=()=>endBatch('Placing cancelled.');
 
 function endBatch(msg){
   batch=null; mode='label';
+  $('batchPrompt').hidden=true;
   $('batchGuide').setAttribute('hidden',''); $('batchGuide').textContent='';
   ovl.style.cursor='';
   if(msg) setStatus(msg);
@@ -1662,6 +1770,12 @@ function renderLabels(){
   return c;
 }
 
+/* the gel's own name with _labelled on the end; reopening a labelled file
+   keeps the original name, so it never grows _labelled_labelled              */
+function outName(){
+  const base=(srcName||'').replace(/^.*[\\/]/,'').replace(/\.[^.]+$/,'').trim();
+  return (base||'gel')+'_labelled.png';
+}
 function outDpi(){
   const v=$('dpi').value;
   return v ? {x:+v, y:+v} : srcDpi;
@@ -1688,6 +1802,12 @@ async function saveNative(layer, chromatic){
     arr=g; ch=1;
   }
   if(inv) for(let i=0;i<arr.length;i++) arr[i]=MAX-arr[i];
+  if(exOn()){                                  // same curve and pivot, at the source's own depth
+    let sum=0, n=0;
+    for(let i=0;i<arr.length;i+=16*ch){ sum+=arr[i]; n++; }
+    const mid=n?sum/n:MAX/2, f=exFactor(), o=exOffset()*MAX;
+    for(let i=0;i<arr.length;i++) arr[i]=clamp(Math.round((arr[i]-mid)*f+mid+o), 0, MAX);
+  }
   if(ch===1 && chromatic){                     // a red label cannot live in a grey file
     const r=new Arr(natW*natH*3);
     for(let i=0,p=0;i<natW*natH;i++,p+=3) r[p]=r[p+1]=r[p+2]=arr[i];
@@ -1742,9 +1862,9 @@ $('save').onclick=async ()=>{
     try{
       const meta={
         v:1, w:natW, h:natH,
-        fx:{bw,inv}, font:$('font').value, bold:$('bold').checked,
+        fx:{bw,inv,b:ex.b,c:ex.c}, font:$('font').value, bold:$('bold').checked,
         dpi:$('dpi').value, geom,
-        srcType:(srcFile&&srcFile.type)||'image/png', srcName:(srcFile&&srcFile.name)||'',
+        srcType:(srcFile&&srcFile.type)||'image/png', srcName,
         labels:labels.map(l=>({cx:l.cx, y:l.y, size:l.size, colour:l.colour,
                                rot:l.rot, anchor:l.anchor, t:textOf(l)}))
       };
@@ -1754,12 +1874,13 @@ $('save').onclick=async ()=>{
     }catch(e){ note=' · could not embed the source, saved flat'; }
   }
 
+  const name=outName();
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([bytes],{type:'image/png'}));
-  a.download='gel-labelled.png';
+  a.download=name;
   a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
-  setStatus(`Saved gel-labelled.png · ${res.desc}${note}`);
+  setStatus(`Saved ${name} · ${res.desc}${note}`);
 };
 
 /* ------------------------------------------------------------ the tour */
@@ -1812,16 +1933,24 @@ const TOUR=[
          <b>Space</b> needs three: it holds the outermost two still and spreads the rest
          so the gaps are equal.</p>`},
 
-  {sel:'#bw', title:'6 · Greyscale &amp; invert',
-   html:`<p>Turn a colour scan greyscale, or flip a dark-background gel to bands-on-white
-         for print. Both affect the saved PNG, and <b>Colour A</b> re-reads the gel when you invert.</p>`},
+  {sel:'#expo', title:'6 · Exposure, greyscale &amp; invert',
+   html:`<p><b>Exposure</b> opens brightness and contrast sliders under the gel. They act on what
+         you can see, so brighter always looks brighter even on an inverted gel. Contrast
+         pivots about the gel's own average rather than mid grey, so it pushes the bands away
+         from the background instead of crushing a dark gel to black. <b>Reset</b> puts both
+         back to zero.</p>
+         <p><b>Black &amp; white</b> turns a colour scan greyscale; <b>Invert</b> flips a
+         dark-background gel to bands-on-white for print.</p>
+         <p>All three are stored as settings rather than painted into the picture, so nothing is
+         lost until you save — and on a 16-bit gel they are applied at its own depth.
+         <b>Colour A</b> re-reads the gel after any of them.</p>`},
 
   {sel:'#font', title:'7 · Typeface',
    html:`<p>Arial, Helvetica, Times or Courier, plus <b>Bold</b> — applied to every label.</p>`},
 
   {sel:'#save', title:'8 · Save',
-   html:`<p>Writes a PNG at the gel's own resolution, with <b>DPI</b> recorded for the journal
-         that asks for it.</p>
+   html:`<p>Writes a PNG at the gel's own resolution, named after the gel you opened with
+         <b>_labelled</b> on the end, and with <b>DPI</b> recorded for the journal that asks for it.</p>
          <p>Leave <b>Re-editable</b> ticked and the source image and every label position are
          tucked inside the PNG — reopen that file here later and you can carry on editing.
          Untick it and the labels are flattened into the picture for good.</p>`}
