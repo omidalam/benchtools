@@ -90,9 +90,6 @@
        letter-spacing:.08em;text-transform:uppercase;color:var(--muted);cursor:pointer;user-select:none}
   .chk input{accent-color:var(--accent);margin:0}
 
-  .comb{height:11px;margin-top:10px;display:flex;gap:5px;align-items:flex-start;overflow:hidden}
-  .comb i{flex:0 0 26px;height:7px;background:var(--line);border-radius:0 0 2px 2px}
-  .comb i.on{background:var(--accent);box-shadow:0 0 9px rgba(255,157,61,.5)}
 
   main{flex:1 1 auto;overflow:auto;padding:22px;display:flex;justify-content:center;
        align-items:flex-start;background:var(--mat)}
@@ -137,6 +134,32 @@
   .cropbox i[data-h=se]{right:-7px;bottom:-7px;cursor:nwse-resize}
   .lvl{position:absolute;height:0;border-top:2px dashed var(--accent);
        transform-origin:0 50%;pointer-events:none}
+  .veil{position:fixed;inset:0;background:var(--dim);display:flex;align-items:center;
+        justify-content:center;z-index:50;padding:20px}
+  .veil[hidden]{display:none}
+  .sheet{background:var(--panel);border:1px solid var(--line);border-radius:6px;
+         width:min(470px,100%);max-height:100%;overflow:auto;padding:16px;
+         box-shadow:0 20px 60px var(--lift)}
+  .sheet h2{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+            margin:0 0 6px;color:var(--text)}
+  .sheet .help{color:var(--muted);font-size:12px;line-height:1.55;margin:0 0 12px}
+  .sheet textarea{width:100%;min-height:185px;resize:vertical;background:var(--ctl);color:var(--text);
+    border:1px solid var(--line);border-radius:3px;padding:9px 10px;
+    font-family:var(--mono);font-size:13px;line-height:1.5}
+  .sheet textarea:focus{outline:2px solid var(--accent-text);outline-offset:1px}
+  .sheet .row{display:flex;align-items:center;gap:9px;margin-top:12px;flex-wrap:wrap}
+  .sheet .go{margin-left:auto;display:flex;gap:8px}
+  .tally{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+         text-transform:uppercase;color:var(--muted)}
+
+  /* live preview of where a batch will land */
+  .guide{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
+  .guide[hidden]{display:none}
+  .guide .ln{stroke:var(--accent);stroke-width:1.5;stroke-dasharray:6 5;
+             vector-effect:non-scaling-stroke;opacity:.85;fill:none}
+  .guide .gap{fill:none;stroke:var(--accent);stroke-width:1.5;
+              vector-effect:non-scaling-stroke;opacity:.8}
+  .guide .gt{fill:var(--accent);opacity:.8}
   .band{position:absolute;border:1px solid var(--accent);background:rgba(255,157,61,.14);
         pointer-events:none;z-index:4}
 
@@ -214,17 +237,8 @@
     <button id="guide" title="A quick tour of what everything does">Guide</button>
     <button type="button" data-theme-toggle>Light</button>
     <label class="file" id="openBtn">Open image<input id="file" type="file" accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"></label>
-    <button id="detect" disabled>Find wells</button>
+    <button id="batchbtn" disabled title="Type a list of labels and place them along a line">Add multiple labels</button>
     <button id="cropbtn" disabled title="Crop and straighten the gel again">Crop / straighten</button>
-    <select id="side" title="Where well labels are placed">
-      <option value="below">Labels below wells</option>
-      <option value="above">Labels above wells</option>
-    </select>
-    <select id="wellrot" title="Angle used for new well labels">
-      <option value="0">Well labels horizontal</option>
-      <option value="-90">Well labels vertical &uarr;</option>
-      <option value="90">Well labels vertical &darr;</option>
-    </select>
     <div class="sep"></div>
     <select id="font" title="Typeface used for labels">
       <option value="Arial, Helvetica, sans-serif">Arial</option>
@@ -248,13 +262,12 @@
     <button id="clear" disabled>Clear labels</button>
     <button id="save" class="primary" disabled>Save PNG</button>
   </div>
-  <div class="comb" id="comb"></div>
 </header>
 
 <main id="main">
   <div class="drop" id="drop">
     <h1>Drop a gel image here</h1>
-    <p>PNG, JPEG, HEIC or HEIF. You'll crop and straighten it first, then wells are found automatically. Reopen a re-editable PNG to pick up where you left off.</p>
+    <p>PNG, JPEG, HEIC or HEIF. You'll crop and straighten it first, then label it. Reopen a re-editable PNG to pick up where you left off.</p>
     <label class="file">Choose a file<input id="file2" type="file" accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"></label>
     <button class="link" id="guide2">or take the tour &rarr;</button>
   </div>
@@ -263,6 +276,7 @@
     <div class="stage" id="stage">
       <canvas id="view"></canvas>
       <div class="ovl" id="ovl"></div>
+      <svg class="guide" id="batchGuide" hidden preserveAspectRatio="none"></svg>
       <div class="prep" id="prepLayer" hidden>
         <div class="scrimclip"><div class="scrim" id="scrim"></div></div>
         <div class="cropbox" id="cropBox">
@@ -340,6 +354,30 @@
   </div>
 </main>
 
+<div class="veil" id="batchVeil" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="batchTitle">
+    <h2 id="batchTitle">Add multiple labels</h2>
+    <p class="help">One label per line, in the order they should appear. You'll then click where the
+      first one goes and where the last one goes; the rest are spaced evenly along the line between,
+      so a row, a column and a diagonal all work. A blank line keeps its place in the spacing but
+      leaves no label, which is how you skip a lane.</p>
+    <textarea id="batchText" spellcheck="false" placeholder="ladder&#10;WT&#10;&#10;idr-1&#10;idr-2"></textarea>
+    <div class="row">
+      <span class="cap">Angle</span>
+      <select id="batchRot">
+        <option value="0">Horizontal</option>
+        <option value="-90">Vertical &uarr;</option>
+        <option value="90">Vertical &darr;</option>
+      </select>
+      <span class="tally" id="batchTally"></span>
+      <span class="go">
+        <button id="batchCancel">Cancel</button>
+        <button id="batchGo" class="primary">Place</button>
+      </span>
+    </div>
+  </div>
+</div>
+
 <footer>
   <div id="status">No image loaded.</div>
   <div id="fmt"></div>
@@ -378,7 +416,7 @@ const octx = orig.getContext('2d');
 
 let natW=0, natH=0, origW=0, origH=0, hasImage=false, edgeRGB=null;
 let geom={angle:0, crop:{x:0,y:0,w:1,h:1}};
-let labels=[], sels=[], primary=null, editing=null, uid=0, lastWells=[];
+let labels=[], sels=[], primary=null, editing=null, uid=0;
 let bw=false, inv=false, srcFile=null, srcBuf=null, srcInfo=null, srcDpi=null;
 
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
@@ -386,13 +424,6 @@ const median=a=>{const s=[...a].sort((x,y)=>x-y);return s.length?s[s.length>>1]:
 const setStatus=t=>status.textContent=t;
 const textOf=l=>(l.el.innerText||'').replace(/\u00a0/g,' ').replace(/\n+$/,'');
 
-/* ---------------------------------------------------------------- comb */
-function comb(n){
-  const c=$('comb'); c.innerHTML='';
-  const teeth=Math.max(14, Math.min(40, n||0));
-  for(let i=0;i<teeth;i++){const t=document.createElement('i'); if(n&&i<n)t.className='on'; c.appendChild(t);}
-}
-comb(0);
 
 
 /* ---------------------------------------------------- PNG side-car data
@@ -718,7 +749,7 @@ function enterPrep(fresh){
   $('lineBtn').classList.remove('on');
   wrap.classList.add('prepmode');
   $('prepLayer').hidden=false; $('prepTools').hidden=false; $('tools').hidden=true;
-  ['detect','save','clear','cropbtn'].forEach(id=>$(id).disabled=true);
+  ['save','clear','cropbtn','batchbtn'].forEach(id=>$(id).disabled=true);
   /* before drawPrep, so the footer is already its final height when the gel
      is fitted — a longer status line steals a row from the image           */
   setStatus('Drag the frame to crop. Straighten with the slider, or draw a level line along the wells.');
@@ -760,22 +791,17 @@ function applyPrep(){
       const p=fromOrig(toOrig({x:l.cx,y:l.y}, old), geom);
       l.cx=p.x; l.y=p.y;
     });
-    lastWells=lastWells.map(v=>{
-      const a=fromOrig(toOrig({x:v.cx,y:v.top},old),geom);
-      const b=fromOrig(toOrig({x:v.cx,y:v.bot},old),geom);
-      return {...v, cx:a.x, top:a.y, bot:b.y};
-    });
   }
   applyFx();
   rescale();
   mode='label';
   wrap.classList.remove('prepmode');
   $('prepLayer').hidden=true; $('prepTools').hidden=true; $('tools').hidden=false;
-  ['detect','save','clear','cropbtn'].forEach(id=>$(id).disabled=false);
+  ['save','clear','cropbtn','batchbtn'].forEach(id=>$(id).disabled=false);
   fitView(); rescale();                         // the swapped toolbar is a different height
   showFormat();
-  if(!labels.length) findWells();
-  else{ labels.forEach(l=>{ place(l); paint(l); }); setStatus('Crop updated — labels moved with the gel.'); }
+  if(labels.length){ labels.forEach(l=>{ place(l); paint(l); }); setStatus('Crop updated — labels moved with the gel.'); }
+  else setStatus('Click the gel to place a label, or use Add multiple labels for a whole row at once.');
 }
 
 $('angle').addEventListener('input', e=>{ prep.fine=+e.target.value; drawPrep(); });
@@ -791,7 +817,7 @@ $('lineBtn').onclick=()=>{
   $('lineBtn').classList.toggle('on',prep.line);
   $('cropBox').classList.toggle('hidden',prep.line);
   $('scrim').classList.toggle('hidden',prep.line);
-  setStatus(prep.line ? 'Drag along an edge that should be level — the well row works well.'
+  setStatus(prep.line ? 'Drag along an edge that should be level — the row of wells is a good one.'
                       : 'Drag the frame to crop.');
 };
 
@@ -949,7 +975,7 @@ async function openFile(file){
   edgeRGB=borderRGB();
 
   labels.forEach(l=>l.el.remove());
-  labels=[]; sels=[]; primary=null; editing=null; lastWells=[];
+  labels=[]; sels=[]; primary=null; editing=null;
   hasImage=true; drop.hidden=true; wrap.hidden=false;
   ['bw','inv'].forEach(id=>$(id).disabled=false);
   srcFile = srcBytes ? new Blob([srcBytes],{type:(meta&&meta.srcType)||'image/png'}) : file;
@@ -965,7 +991,7 @@ async function openFile(file){
     applyFx();
     rescale();
     showFormat();
-    ['detect','save','clear','cropbtn'].forEach(id=>$(id).disabled=false);
+    ['save','clear','cropbtn','batchbtn'].forEach(id=>$(id).disabled=false);
     restoreLabels(meta);
   }else{
     if(meta) setStatus('This PNG has label positions but no embedded source, so the labels are already part of the picture.');
@@ -979,21 +1005,17 @@ function applySettings(m){
   inv = !!(m.fx && m.fx.inv); $('inv').classList.toggle('on',inv);
   if(m.font) $('font').value=m.font;
   $('bold').checked=!!m.bold;
-  if(m.side)    $('side').value=m.side;
-  if(m.wellrot!==undefined) $('wellrot').value=String(m.wellrot);
   if(m.dpi!==undefined) $('dpi').value=m.dpi;
 }
 
 function restoreLabels(m){
-  lastWells = m.wells || [];
   (m.labels||[]).forEach(o=>{
-    const l=make(o.cx, o.y, o.size, o.wi, o.rot, o.anchor);
+    const l=make(o.cx, o.y, o.size, o.rot, o.anchor);
     l.colour=o.colour||'auto';
     if(o.t) l.el.innerText=o.t;
     l.el.classList.toggle('empty', !l.el.innerText.trim());
     place(l); paint(l);
   });
-  comb(labels.filter(l=>l.wi!==undefined).length);
   const n=labels.length;
   setStatus(`Reopened with ${n} label${n===1?'':'s'} — edit and save again.`);
 }
@@ -1060,7 +1082,7 @@ new ResizeObserver(()=>{ fitView(); rescale(); }).observe(mainEl);
 /* ------------------------------------------------------------- labels */
 /* A label is anchored at (cx, y). For rot 0 that point is the top centre of
    the text block; rotated, it stays the top centre of the rotated box, so a
-   label keeps touching its well no matter how long the text gets.
+   label keeps its grip on the spot no matter how long the text gets.
    anchor:'bottom' flips it to the bottom edge, used above the wells.        */
 function offsets(l, W, H){
   if(l.rot===0)   return [-W/2, l.anchor==='bottom' ? -H : 0];
@@ -1068,11 +1090,11 @@ function offsets(l, W, H){
   return             [ H/2, l.anchor==='bottom' ? -W : 0];
 }
 
-function make(cx, y, size, wi, rot, anchor){
+function make(cx, y, size, rot, anchor){
   const el=document.createElement('div');
   el.className='lab empty';
   el.spellcheck=false;
-  const l={id:++uid, cx, y, size, colour:'auto', rot:rot||0, anchor:anchor||'top', el, wi};
+  const l={id:++uid, cx, y, size, colour:'auto', rot:rot||0, anchor:anchor||'top', el};
   ovl.appendChild(el);
   labels.push(l);
   place(l); paint(l);
@@ -1172,9 +1194,8 @@ function luminance(l){
   return n?sum/n:0;
 }
 
-/* a duplicate is no longer tied to a well, so it gets no well index */
 function dup(l){
-  const c=make(l.cx, l.y, l.size, undefined, l.rot, l.anchor);
+  const c=make(l.cx, l.y, l.size, l.rot, l.anchor);
   c.colour=l.colour;
   c.el.innerHTML=l.el.innerHTML;                   // keeps any line breaks
   c.el.classList.toggle('empty', !c.el.innerText.trim());
@@ -1243,8 +1264,8 @@ function toggle(l){
   select(sels.includes(l) ? sels.filter(x=>x!==l) : [...sels, l]);
 }
 function deselect(){ select([]); }
-function cleanup(l){        // a blank hand-placed label removes itself; well labels stay put
-  if(l.wi===undefined && !textOf(l).trim()) remove(l);
+function cleanup(l){                        // a label left blank tidies itself away
+  if(!textOf(l).trim()) remove(l);
 }
 function edit(l){
   select([l]);
@@ -1297,6 +1318,20 @@ function syncTools(){
 
 /* click bare gel to add a label; drag across it to select several */
 ovl.addEventListener('pointerdown', ev=>{
+  if(mode==='batch'){
+    ev.preventDefault();
+    const r=view.getBoundingClientRect(), k=natW/r.width;
+    const p={x:(ev.clientX-r.left)*k, y:(ev.clientY-r.top)*k};
+    if(!batch.p0){
+      batch.p0=p;
+      if(batch.lines.length===1){ commitBatch(p,p); return; }
+      drawGuide(p,p);
+      setStatus('Now click where the last one goes — hold Shift to keep the line straight. Esc cancels.');
+    }else{
+      commitBatch(batch.p0, ev.shiftKey ? snapTo(batch.p0,p) : p);
+    }
+    return;
+  }
   if(ev.target!==ovl) return;
   const r=view.getBoundingClientRect(), k=natW/r.width;
   const sx=ev.clientX, sy=ev.clientY, add=ev.shiftKey;
@@ -1334,8 +1369,19 @@ ovl.addEventListener('pointerdown', ev=>{
   window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up);
 });
 
+ovl.addEventListener('pointermove', ev=>{
+  if(mode!=='batch' || !batch || !batch.p0) return;
+  const r=view.getBoundingClientRect(), k=natW/r.width;
+  const p={x:(ev.clientX-r.left)*k, y:(ev.clientY-r.top)*k};
+  drawGuide(batch.p0, ev.shiftKey ? snapTo(batch.p0,p) : p);
+});
+
 /* -------------------------------------------------------- keyboard */
 document.addEventListener('keydown', ev=>{
+  if(mode==='batch'){
+    if(ev.key==='Escape'){ ev.preventDefault(); endBatch('Placing cancelled.'); }
+    return;
+  }
   if(editing) return;
   const t=document.activeElement;
   if(t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) return;
@@ -1396,178 +1442,188 @@ $('alM').onclick=()=>align('middle');
 $('alB').onclick=()=>align('bottom');
 $('del').onclick   =()=>sels.slice().forEach(remove);
 $('clear').onclick =()=>{
-  labels.slice().forEach(remove); deselect(); lastWells=[]; comb(0); setStatus('Labels cleared.');
+  labels.slice().forEach(remove); deselect(); setStatus('Labels cleared.');
 };
 
-/* ------------------------------------------------------- well finding */
-$('detect').onclick=findWells;
+/* ------------------------------------------------- adding labels in bulk
+   The two clicks give a segment; every label sits at its own fraction along
+   it, so one gesture covers a row, a column and any diagonal. Each label is
+   then nudged so its drawn box is centred on that point, which keeps the
+   click meaning the same thing whatever the angle.                        */
+const SVGNS='http://www.w3.org/2000/svg';
+let batch=null;                                   // {lines, rot, size, p0} while placing
 
-function wellPos(v){
-  const gap=Math.max(3, v.h*0.45);
-  return $('side').value==='below' ? v.bot+gap : Math.max(0, v.top-gap);
+function batchSize(){
+  const sizes=labels.map(l=>l.size);
+  return sizes.length ? median(sizes) : clamp(Math.round(natH/28),10,200);
 }
-const wellAnchor = ()=> $('side').value==='below' ? 'top' : 'bottom';
+const mcv=document.createElement('canvas').getContext('2d');
+function widthUnit(txt){                          // text width per 1px of font size
+  mcv.font=`${$('bold').checked?'700':'400'} 100px ${$('font').value}`;
+  return mcv.measureText(txt).width/100;
+}
+/* Packed along a short line the labels would run into each other, so find the
+   largest size at which no two neighbours touch. Every term scales with the
+   font size, so each pair gives a straight bound on it. Shrinks only — it
+   never grows past the size asked for.                                      */
+function fitBatchSize(p0,p1){
+  const pts=batchPoints(p0,p1).filter(p=>p.txt.trim());
+  const len=Math.hypot(p1.x-p0.x, p1.y-p0.y);
+  if(pts.length<2 || len<1) return batch.size;
+  const ux=(p1.x-p0.x)/len, uy=(p1.y-p0.y)/len;
+  const a=batch.rot*Math.PI/180, cs=Math.cos(a), sn=Math.sin(a);
+  const along=p=>Math.abs(widthUnit(p.txt)/2*(ux*cs+uy*sn))      // half the box,
+                +Math.abs(0.6*(-ux*sn+uy*cs));                   // measured along the line
+  let size=batch.size;
+  for(let i=0;i<pts.length-1;i++){
+    const d=Math.hypot(pts[i+1].x-pts[i].x, pts[i+1].y-pts[i].y);
+    const need=(along(pts[i])+along(pts[i+1]))*1.12;             // a little air between
+    if(need>0) size=Math.min(size, d/need);
+  }
+  return clamp(Math.floor(size), 5, batch.size);
+}
 
-function reflowWells(){
-  if(!lastWells.length) return;
-  const rot=+$('wellrot').value, anc=wellAnchor();
-  labels.forEach(l=>{
-    const v=lastWells[l.wi];
-    if(l.wi===undefined || !v) return;
-    l.rot=rot; l.anchor=anc; l.y=wellPos(v);
-    place(l); paint(l);
+function batchLines(){
+  const raw=$('batchText').value.split('\n').map(t=>t.replace(/\s+$/,''));
+  while(raw.length && !raw[raw.length-1].trim()) raw.pop();   // ignore trailing blanks
+  return raw;
+}
+function batchTally(){
+  const l=batchLines(), n=l.filter(t=>t.trim()).length, gaps=l.length-n;
+  $('batchTally').textContent = !l.length ? '' :
+    `${n} label${n===1?'':'s'}` + (gaps?` · ${gaps} gap${gaps===1?'':'s'}`:'');
+  $('batchGo').disabled = !n;
+}
+$('batchText').addEventListener('input', batchTally);
+
+function openBatch(){
+  if(!hasImage || mode!=='label') return;
+  $('batchVeil').hidden=false;
+  batchTally();
+  $('batchText').focus();
+}
+function closeBatch(){ $('batchVeil').hidden=true; }
+$('batchbtn').onclick=openBatch;
+$('batchCancel').onclick=closeBatch;
+$('batchVeil').addEventListener('pointerdown', e=>{ if(e.target===$('batchVeil')) closeBatch(); });
+$('batchText').addEventListener('keydown', e=>{
+  if(e.key==='Escape'){ e.preventDefault(); closeBatch(); }
+  if(e.key==='Enter' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); startBatch(); }
+});
+
+function startBatch(){
+  const lines=batchLines();
+  if(!lines.filter(t=>t.trim()).length) return;
+  closeBatch();
+  stopEdit(); deselect();
+  batch={lines, rot:+$('batchRot').value, size:batchSize(), p0:null};
+  mode='batch';
+  ovl.style.cursor='crosshair';
+  setStatus(`Placing ${lines.filter(t=>t.trim()).length} labels — click where the first one goes. Esc cancels.`);
+}
+$('batchGo').onclick=startBatch;
+
+function endBatch(msg){
+  batch=null; mode='label';
+  $('batchGuide').setAttribute('hidden',''); $('batchGuide').textContent='';
+  ovl.style.cursor='';
+  if(msg) setStatus(msg);
+}
+
+/* hold Shift to lock the line to 45-degree steps */
+function snapTo(p0,p1){
+  const dx=p1.x-p0.x, dy=p1.y-p0.y, step=Math.PI/4;
+  const a=Math.round(Math.atan2(dy,dx)/step)*step, len=Math.hypot(dx,dy);
+  return {x:p0.x+Math.cos(a)*len, y:p0.y+Math.sin(a)*len};
+}
+function batchPoints(p0,p1){
+  const n=batch.lines.length;
+  return batch.lines.map((txt,i)=>{
+    const t = n===1 ? 0 : i/(n-1);
+    return {txt, x:p0.x+(p1.x-p0.x)*t, y:p0.y+(p1.y-p0.y)*t};
   });
-  syncTools();
 }
-$('side').onchange=reflowWells;              // keep whatever has been typed in
-$('wellrot').onchange=reflowWells;
 
-function findWells(){
-  if(!hasImage) return;
-  const MAX=700;
-  const s=Math.min(1, MAX/Math.max(natW,natH));
-  const w=Math.max(8,Math.round(natW*s)), h=Math.max(8,Math.round(natH*s));
-  const c=document.createElement('canvas'); c.width=w; c.height=h;
-  const cx=c.getContext('2d',{willReadFrequently:true});
-  cx.drawImage(proc,0,0,w,h);
-  const d=cx.getImageData(0,0,w,h).data;
-  const g=new Uint8Array(w*h);
-  for(let i=0,p=0;i<g.length;i++,p+=4) g[i]=(0.299*d[p]+0.587*d[p+1]+0.114*d[p+2])|0;
+/* The ghosts sit on the line, so a continuous line would strike through
+   them. Each one is measured and the line is drawn as segments that stop
+   short of it — the extent of a rotated label along the line direction is
+   |W/2·(u·ex)| + |H/2·(u·ey)| for the label's own axes ex, ey.            */
+function drawGuide(p0,p1){
+  const g=$('batchGuide');
+  const eff=fitBatchSize(p0,p1);
+  g.setAttribute('viewBox',`0 0 ${natW} ${natH}`);
+  g.textContent='';
+  const fam=$('font').value, weight=$('bold').checked?'700':'400';
+  const pts=batchPoints(p0,p1);
+  const marks=[];
 
-  const band=Math.max(6, Math.round(h*0.55));       // wells sit in the upper part of a gel
-  const hist=new Float64Array(256);
-  for(let y=0;y<band;y++) for(let x=0;x<w;x++) hist[g[y*w+x]]++;
+  pts.forEach(p=>{
+    if(!p.txt.trim()){
+      const c=document.createElementNS(SVGNS,'circle');
+      c.setAttribute('class','gap');
+      c.setAttribute('cx',p.x); c.setAttribute('cy',p.y);
+      c.setAttribute('r',Math.max(2,eff*0.18));
+      g.appendChild(c);
+      marks.push({p, w:0, h:0, r:+c.getAttribute('r')});
+      return;
+    }
+    const t=document.createElementNS(SVGNS,'text');
+    t.setAttribute('class','gt');
+    t.setAttribute('x',p.x); t.setAttribute('y',p.y);
+    t.setAttribute('font-size',eff);
+    t.setAttribute('font-family',fam);
+    t.setAttribute('font-weight',weight);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('dominant-baseline','central');
+    if(batch.rot) t.setAttribute('transform',`rotate(${batch.rot} ${p.x} ${p.y})`);
+    t.textContent=p.txt.split('\n')[0];
+    g.appendChild(t);
+    let w=0; try{ w=t.getComputedTextLength(); }catch(_){ w=eff*p.txt.length*0.55; }
+    marks.push({p, w, h:eff, r:0});
+  });
 
-  // one threshold rarely suits every gel, so sweep a spread of them and keep the best row
-  const cand=new Set([otsu(hist, w*band)]);
-  [3,7,12,20,30,50,70,80,88,93,97].forEach(p=>cand.add(pct(hist, w*band, p)));
-
-  let best=null;
-  for(const t of cand){
-    if(t<=0 || t>=255) continue;
-    for(const pol of [0,1]){
-      const row=bestRow(blobs(g,w,h,band,t,pol), w, h);
-      if(row && (!best || row.score>best.score)) best=row;
+  const dx=p1.x-p0.x, dy=p1.y-p0.y, len=Math.hypot(dx,dy);
+  if(len>0.5){
+    const ux=dx/len, uy=dy/len;
+    const a=batch.rot*Math.PI/180, cs=Math.cos(a), sn=Math.sin(a);
+    const reach=m=> m.r ? m.r+eff*0.25
+                        : Math.abs(m.w/2*(ux*cs+uy*sn)) + Math.abs(m.h/2*(-ux*sn+uy*cs))
+                          + eff*0.25;
+    for(let i=0;i<marks.length-1;i++){
+      const A=marks[i], B=marks[i+1];
+      const d=Math.hypot(B.p.x-A.p.x, B.p.y-A.p.y);
+      const s0=reach(A), s1=d-reach(B);
+      if(s1-s0 < eff*0.2) continue;                 // no room for a segment
+      const ln=document.createElementNS(SVGNS,'line');
+      ln.setAttribute('class','ln');
+      ln.setAttribute('x1',A.p.x+ux*s0); ln.setAttribute('y1',A.p.y+uy*s0);
+      ln.setAttribute('x2',A.p.x+ux*s1); ln.setAttribute('y2',A.p.y+uy*s1);
+      g.insertBefore(ln, g.firstChild);
     }
   }
-  if(!best){ comb(0); setStatus('No wells found — click anywhere on the gel to place a label by hand.'); return; }
-
-  const wells = best.items.sort((a,b)=>a.x0-b.x0).map(b=>({
-    cx:(b.x0+b.x1+1)/2/s, top:b.y0/s, bot:(b.y1+1)/s, w:(b.x1-b.x0+1)/s, h:(b.y1-b.y0+1)/s
-  }));
-
-  labels.slice().forEach(remove); deselect();
-  lastWells=wells;
-
-  const mw=median(wells.map(v=>v.w));
-  const size=clamp(Math.round(Math.min(mw*0.62, natH*0.045)), 9, 200);
-  const rot=+$('wellrot').value, anc=wellAnchor();
-  wells.forEach((v,i)=> make(v.cx, wellPos(v), size, i, rot, anc));
-  comb(wells.length);
-  setStatus(`${wells.length} well${wells.length===1?'':'s'} found — click a label to type into it.`);
-}
-function pct(hist,n,p){
-  const target=n*p/100; let acc=0;
-  for(let i=0;i<256;i++){ acc+=hist[i]; if(acc>=target) return i; }
-  return 255;
-}
-function otsu(hist,n){
-  let sum=0; for(let i=0;i<256;i++) sum+=i*hist[i];
-  let sumB=0,wB=0,mx=-1,thr=128;
-  for(let i=0;i<256;i++){
-    wB+=hist[i]; if(!wB) continue;
-    const wF=n-wB; if(!wF) break;
-    sumB+=i*hist[i];
-    const mB=sumB/wB, mF=(sum-sumB)/wF, v=wB*wF*(mB-mF)*(mB-mF);
-    if(v>mx){mx=v;thr=i;}
-  }
-  return thr;
+  g.removeAttribute('hidden');
 }
 
-function blobs(g,w,h,rows,t,pol){
-  const on = pol===0 ? (v=>v<t) : (v=>v>t);
-  const seen=new Uint8Array(w*rows), out=[];
-  const stack=new Int32Array(w*rows);
-  const maxArea=w*rows*0.28;
-  for(let i=0;i<w*rows;i++){
-    if(seen[i] || !on(g[i])) continue;
-    let sp=0; stack[sp++]=i; seen[i]=1;
-    let x0=1e9,x1=-1,y0=1e9,y1=-1,area=0;
-    while(sp){
-      const p=stack[--sp], x=p%w, y=(p/w)|0;
-      area++;
-      if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
-      if(x>0){const q=p-1; if(!seen[q]&&on(g[q])){seen[q]=1;stack[sp++]=q;}}
-      if(x<w-1){const q=p+1; if(!seen[q]&&on(g[q])){seen[q]=1;stack[sp++]=q;}}
-      if(y>0){const q=p-w; if(!seen[q]&&on(g[q])){seen[q]=1;stack[sp++]=q;}}
-      if(y<rows-1){const q=p+w; if(!seen[q]&&on(g[q])){seen[q]=1;stack[sp++]=q;}}
-    }
-    if(area>maxArea) continue;
-    const bw=x1-x0+1, bh=y1-y0+1;
-    if(bw<Math.max(3,w*0.008) || bw>w*0.22) continue;
-    if(bh<2 || bh>h*0.16) continue;
-    if(area/(bw*bh) < 0.45) continue;                // wells read as filled rectangles
-    const ar=bw/bh; if(ar<0.25 || ar>14) continue;
-    out.push({x0,x1,y0,y1,bw,bh,area,cy:(y0+y1)/2});
-  }
-  return out;
+function commitBatch(p0,p1){
+  const eff=fitBatchSize(p0,p1);
+  const made=[];
+  batchPoints(p0,p1).forEach(p=>{
+    if(!p.txt.trim()) return;                     // the slot is kept, no label made
+    const l=make(p.x, p.y, eff, batch.rot, 'top');
+    l.el.innerText=p.txt;
+    l.el.classList.remove('empty');
+    place(l);
+    const b=boxOf(l);                             // centre the box on its point
+    l.cx += p.x-(b.x0+b.x1)/2;
+    l.y  += p.y-(b.y0+b.y1)/2;
+    place(l); paint(l);
+    made.push(l);
+  });
+  const n=made.length;
+  const shrunk = eff<batch.size ? `, shrunk to ${eff}px so they don't collide` : '';
+  endBatch(`Placed ${n} label${n===1?'':'s'}${shrunk}. Still selected, so size and colour apply to all.`);
+  select(made);
 }
-
-function cv(v){                                      // coefficient of variation
-  const m=v.reduce((a,b)=>a+b,0)/v.length;
-  if(m<=0) return 9;
-  return Math.sqrt(v.reduce((a,b)=>a+(b-m)*(b-m),0)/v.length)/m;
-}
-function bestRow(list,w,h){
-  if(list.length<2) return null;
-  const arr=[...list].sort((a,b)=>a.cy-b.cy);
-  const tol=Math.max(4, h*0.035);
-  let best=null;
-  for(let i=0;i<arr.length;i++){
-    const group=[arr[i]];
-    for(let j=i+1;j<arr.length && arr[j].cy-arr[i].cy<=tol;j++) group.push(arr[j]);
-    if(group.length<2) continue;
-
-    const mw0=median(group.map(b=>b.bw));
-    let kept=group.filter(b=>b.bw>=mw0*0.4 && b.bw<=mw0*2.5).sort((a,b)=>a.x0-b.x0);
-    const ded=[];                                    // one blob per lane
-    for(const b of kept){
-      const last=ded[ded.length-1];
-      if(last && b.x0<=last.x1){ if(b.bw*b.bh > last.bw*last.bh) ded[ded.length-1]=b; }
-      else ded.push(b);
-    }
-    kept=ded;
-    if(kept.length<2) continue;
-
-    const span=Math.max(...kept.map(b=>b.x1))-Math.min(...kept.map(b=>b.x0));
-    if(span < w*0.12) continue;
-
-    const wcv=cv(kept.map(b=>b.bw)), hcv=cv(kept.map(b=>b.bh));
-    if(wcv>0.35 || hcv>0.5) continue;                // a comb cuts identical wells
-
-    const cys=kept.map(b=>b.cy), mh=median(kept.map(b=>b.bh));
-    if(Math.max(...cys)-Math.min(...cys) > Math.max(3, mh)) continue;
-
-    let reg=0.35;
-    if(kept.length>=3){
-      const c=kept.map(b=>(b.x0+b.x1)/2), gaps=[];
-      for(let k=0;k<c.length-1;k++) gaps.push(c[k+1]-c[k]);
-      const m=gaps.reduce((a,b)=>a+b,0)/gaps.length;
-      if(m<=0) continue;
-      reg=Math.max(0, 1-cv(gaps));
-      if(reg<0.72) continue;                         // lanes are evenly spaced
-      const mw=median(kept.map(b=>b.bw));
-      if(mw/m<0.15 || mw/m>0.98) continue;
-      if(mw < Math.max(4, w*0.015)) continue;        // reject speckle rows
-    }
-
-    const cy=median(cys);
-    const score = reg*10 + (1-wcv)*4 + (1-cy/h)*5 + Math.min(kept.length,10)*0.6 + (span/w)*2;
-    if(!best || score>best.score) best={items:kept, score};
-  }
-  return best;
-}
-
 
 /* --------------------------------------------------------------- save */
 function showFormat(){
@@ -1687,11 +1743,10 @@ $('save').onclick=async ()=>{
       const meta={
         v:1, w:natW, h:natH,
         fx:{bw,inv}, font:$('font').value, bold:$('bold').checked,
-        side:$('side').value, wellrot:+$('wellrot').value, dpi:$('dpi').value, geom,
+        dpi:$('dpi').value, geom,
         srcType:(srcFile&&srcFile.type)||'image/png', srcName:(srcFile&&srcFile.name)||'',
-        wells:lastWells,
         labels:labels.map(l=>({cx:l.cx, y:l.y, size:l.size, colour:l.colour,
-                               rot:l.rot, anchor:l.anchor, wi:l.wi, t:textOf(l)}))
+                               rot:l.rot, anchor:l.anchor, t:textOf(l)}))
       };
       bytes=insertChunks(bytes, [mkChunk('iTXt', mkITXt(KEY, JSON.stringify(meta))),
                                  mkChunk('geLb', srcBuf)]);
@@ -1724,24 +1779,31 @@ const TOUR=[
          <b>Fit</b> then takes the largest crop with no empty corners.</p>
          <p><b>Crop / straighten</b> reopens this at any time — your labels move with the gel.</p>`},
 
-  {sel:'#detect', title:'3 · Find wells',
-   html:`<p>Scans the top of the gel for the well row and puts an empty label under each one,
-         ready to type into. The comb strip below the toolbar lights up one tooth per well found.</p>`},
+  {sel:'#batchbtn', title:'3 · Add multiple labels',
+   html:`<p>The fast way to label a whole gel. Type your labels into the box, <b>one per line</b>,
+         in the order they should appear, and pick whether they read horizontally or run
+         vertically up or down the lane.</p>
+         <p>Then click <b>where the first label goes</b> and <b>where the last one goes</b>. The rest
+         are spaced evenly along the line between those two points — so a row across the lanes,
+         a column down the side and a diagonal are all the same two clicks. Hold
+         <kbd>Shift</kbd> on the second click to lock the line dead straight.</p>
+         <p>While you aim, the labels are previewed on the gel at their real size, joined by a
+         dashed line, so you can see the result before committing. If they would run into each
+         other, the whole set is shrunk to the largest size that still fits. <kbd>Esc</kbd>
+         cancels.</p>
+         <p>A <b>blank line</b> keeps its place in the spacing but makes no label — that's how you
+         skip a lane and keep everything else evenly spaced.</p>`},
 
-  {sel:'#side', title:'4 · Where labels sit',
-   html:`<p>Put the well labels <b>below</b> or <b>above</b> the wells, and set whether new ones
-         read horizontally or run vertically up or down the lane.</p>`},
-
-  {sel:'#stage', title:'5 · Writing labels',
+  {sel:'#stage', title:'4 · Writing labels',
    html:`<p>Click a label to type into it. <kbd>Enter</kbd> finishes,
          <kbd>Shift</kbd>+<kbd>Enter</kbd> starts a new line.</p>
          <p>Click bare gel to drop an extra label anywhere. Drag one to move it, and
          <b>hold Alt/Option while dragging</b> to leave a copy behind.</p>
          <p>Drag across the gel to select several, <kbd>Shift</kbd>-click to add one to the
          selection, arrows nudge (with <kbd>Shift</kbd> for a bigger step), and
-         <kbd>Del</kbd> removes. A blank label you placed by hand tidies itself away.</p>`},
+         <kbd>Del</kbd> removes. A label left blank tidies itself away.</p>`},
 
-  {sel:'#tools', title:'6 · Size, angle, colour, align',
+  {sel:'#tools', title:'5 · Size, angle, colour, align',
    html:`<p>Acts on whatever is selected. <b>Size</b> has an <b>all</b> tick to resize every label at once.</p>
          <p><b>Colour A</b> reads the gel behind each label and picks white or red to suit it,
          so labels stay readable over both dark and light backgrounds. <b>W</b> and <b>R</b>
@@ -1750,14 +1812,14 @@ const TOUR=[
          <b>Space</b> needs three: it holds the outermost two still and spreads the rest
          so the gaps are equal.</p>`},
 
-  {sel:'#bw', title:'7 · Greyscale &amp; invert',
+  {sel:'#bw', title:'6 · Greyscale &amp; invert',
    html:`<p>Turn a colour scan greyscale, or flip a dark-background gel to bands-on-white
          for print. Both affect the saved PNG, and <b>Colour A</b> re-reads the gel when you invert.</p>`},
 
-  {sel:'#font', title:'8 · Typeface',
+  {sel:'#font', title:'7 · Typeface',
    html:`<p>Arial, Helvetica, Times or Courier, plus <b>Bold</b> — applied to every label.</p>`},
 
-  {sel:'#save', title:'9 · Save',
+  {sel:'#save', title:'8 · Save',
    html:`<p>Writes a PNG at the gel's own resolution, with <b>DPI</b> recorded for the journal
          that asks for it.</p>
          <p>Leave <b>Re-editable</b> ticked and the source image and every label position are
