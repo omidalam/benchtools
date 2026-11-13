@@ -93,10 +93,14 @@
 
   main{flex:1 1 auto;overflow:auto;padding:12px;display:flex;justify-content:center;
        align-items:flex-start;background:var(--mat)}
-  .wrap{display:flex;flex-direction:column;align-items:center;max-width:100%;min-width:0;
+  .wrap{max-width:100%;min-width:0;
         box-shadow:0 0 0 1px var(--line),0 18px 50px var(--lift)}
-  .wrap > :not(.stage){width:100%}
-  .stage{position:relative;line-height:0;overflow:hidden;flex:0 0 auto}
+  .stage{position:relative;line-height:0;overflow:hidden}
+  /* The bars live here, not with the gel: resizing the image must not move
+     the controls out from under the pointer.                               */
+  .dock{flex:0 0 auto;background:var(--panel);border-top:1px solid var(--line)}
+  .dock .tools,.dock .prompt{border-top:0}
+  .dock > :not([hidden]) ~ :not([hidden]){border-top:1px solid var(--line)}
   .stage canvas{display:block;width:100%;height:auto}
   .ovl{position:absolute;inset:0;line-height:normal;cursor:crosshair}
 
@@ -136,10 +140,9 @@
   .lvl{position:absolute;height:0;border-top:2px dashed var(--accent);
        transform-origin:0 50%;pointer-events:none}
   /* docked bars below the image: never cover the gel */
-  .expo{border-top:1px solid var(--line)}
   .expo[hidden]{display:none}
   .prompt{display:flex;align-items:center;gap:13px;
-          background:var(--panel);border-top:2px solid var(--accent-text);padding:9px 14px}
+          background:var(--panel);box-shadow:inset 0 2px 0 var(--accent-text);padding:9px 12px}
   .prompt .txt{display:flex;flex-direction:column;gap:3px;min-width:0}
   .prompt[hidden]{display:none}
   .prompt .step{flex:0 0 auto;width:27px;height:27px;border-radius:50%;
@@ -180,7 +183,7 @@
 
   /* size + style controls, pinned under the image */
   .tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-         background:var(--panel);border-top:1px solid var(--line);padding:6px 9px}
+         background:var(--panel);padding:6px 12px}
   .tools.off .grp{opacity:.35;pointer-events:none}
   .grp{display:flex;align-items:center;gap:6px}
   .tools input[type=range]{width:150px;accent-color:var(--accent);margin:0}
@@ -198,6 +201,16 @@
   .sw.col input[type=color]::-webkit-color-swatch-wrapper{padding:0}
   .sw.col input[type=color]::-webkit-color-swatch{border:0;border-radius:0}
   .sw.col input[type=color]::-moz-color-swatch{border:0}
+  .hex{width:84px;font-family:var(--mono);font-size:11px;text-transform:uppercase;
+       background:var(--ctl);color:var(--text);border:1px solid var(--line);
+       border-radius:3px;padding:6px 7px;letter-spacing:.06em}
+  .hex:focus{outline:2px solid var(--accent-text);outline-offset:1px}
+  .recent{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .recent button{width:21px;height:21px;padding:0;border-radius:3px;
+                 border:1px solid var(--line);cursor:pointer}
+  .recent button:hover{border-color:var(--accent-text);transform:translateY(-1px)}
+  .recent .none{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+                text-transform:uppercase;color:var(--muted)}
   .sw.ic{display:flex;align-items:center;justify-content:center}
   .sw.ic svg{width:15px;height:15px}
   .sw.ic rect{fill:currentColor;opacity:.8}
@@ -303,101 +316,119 @@
         <div class="lvl" id="lvl" hidden></div>
       </div>
     </div>
-    <div class="tools" id="prepTools" hidden>
-      <div class="grp">
-        <button class="sw" id="rotL" title="Rotate a quarter turn left">&#8630;</button>
-        <button class="sw" id="rotR" title="Rotate a quarter turn right">&#8631;</button>
-      </div>
-      <div class="sep"></div>
-      <div class="grp">
-        <span class="cap">Straighten</span>
-        <input type="range" id="angle" min="-45" max="45" step="0.1" value="0" title="Arrow keys nudge by 0.1°">
-        <span class="pt" id="angpt">0.0°</span>
-      </div>
-      <div class="sep"></div>
-      <div class="grp">
-        <button id="lineBtn" class="tgl" title="Drag along something that should be level">Level line</button>
-        <button id="fitBtn" title="Largest crop with no empty corners">Fit</button>
-        <button id="resetBtn">Reset</button>
-      </div>
-      <div class="grp" style="margin-left:auto">
-        <span class="count" id="prepInfo"></span>
-        <button id="applyBtn" class="primary">Use this gel &rarr;</button>
-      </div>
-    </div>
-    <div class="tools off" id="tools">
-      <div class="grp">
-        <span class="cap">Size</span>
-        <input type="range" id="size" min="6" max="200" step="1" value="18" title="Font size">
-        <span class="pt" id="pt">18px</span>
-        <label class="chk" title="Apply the size to every label"><input type="checkbox" id="all"> all</label>
-      </div>
-      <div class="sep"></div>
-      <div class="grp">
-        <span class="cap">Angle</span>
-        <button class="sw" id="r0" title="Horizontal">H</button>
-        <button class="sw" id="rup" title="Vertical, reading upwards">&uarr;</button>
-        <button class="sw" id="rdn" title="Vertical, reading downwards">&darr;</button>
-      </div>
-      <div class="sep"></div>
-      <div class="grp">
-        <span class="cap">Colour</span>
-        <button class="sw" id="cAuto" title="Pick from the background">A</button>
-        <button class="sw w" id="cWhite" title="White">W</button>
-        <button class="sw r" id="cRed" title="Red">R</button>
-        <label class="sw col" id="cCustomWrap" title="Custom colour"><input type="color" id="cCustom" value="#35d0ff"></label>
-      </div>
-      <div class="sep"></div>
-      <div class="grp" id="alignGrp">
-        <span class="cap">Align</span>
-        <button class="sw ic" id="alL" title="Align left edges"><svg viewBox="0 0 16 16"><path d="M2.5 2v12"/><rect x="4.5" y="4" width="9" height="3"/><rect x="4.5" y="9" width="6" height="3"/></svg></button>
-        <button class="sw ic" id="alC" title="Centre horizontally"><svg viewBox="0 0 16 16"><path d="M8 2v12"/><rect x="3.5" y="4" width="9" height="3"/><rect x="5" y="9" width="6" height="3"/></svg></button>
-        <button class="sw ic" id="alR" title="Align right edges"><svg viewBox="0 0 16 16"><path d="M13.5 2v12"/><rect x="2.5" y="4" width="9" height="3"/><rect x="5.5" y="9" width="6" height="3"/></svg></button>
-        <button class="sw ic" id="alT" title="Align top edges"><svg viewBox="0 0 16 16"><path d="M2 2.5h12"/><rect x="4" y="4.5" width="3" height="9"/><rect x="9" y="4.5" width="3" height="6"/></svg></button>
-        <button class="sw ic" id="alM" title="Centre vertically"><svg viewBox="0 0 16 16"><path d="M2 8h12"/><rect x="4" y="3.5" width="3" height="9"/><rect x="9" y="5" width="3" height="6"/></svg></button>
-        <button class="sw ic" id="alB" title="Align bottom edges"><svg viewBox="0 0 16 16"><path d="M2 13.5h12"/><rect x="4" y="2.5" width="3" height="9"/><rect x="9" y="5.5" width="3" height="6"/></svg></button>
-      </div>
-      <div class="sep"></div>
-      <div class="grp" id="distGrp">
-        <span class="cap">Space</span>
-        <button class="sw ic" id="dsH" title="Space evenly across (equal gaps between centres)"><svg viewBox="0 0 16 16"><rect x="1" y="3" width="2.4" height="10"/><rect x="6.8" y="3" width="2.4" height="10"/><rect x="12.6" y="3" width="2.4" height="10"/><path d="M4.6 8h1.2M10.4 8h1.2"/></svg></button>
-        <button class="sw ic" id="dsV" title="Space evenly down (equal gaps between centres)"><svg viewBox="0 0 16 16"><rect x="3" y="1" width="10" height="2.4"/><rect x="3" y="6.8" width="10" height="2.4"/><rect x="3" y="12.6" width="10" height="2.4"/><path d="M8 4.6v1.2M8 10.4v1.2"/></svg></button>
-      </div>
-      <div class="sep"></div>
-      <div class="grp"><button class="sw del" id="del" title="Delete selected labels">&times;</button></div>
-      <div class="count" id="count">no labels selected</div>
-    </div>
-
-    <div class="tools expo" id="expoBar" hidden>
-      <div class="grp">
-        <span class="cap">Brightness</span>
-        <input type="range" id="exB" min="-100" max="100" step="1" value="0">
-        <span class="pt" id="exBv">0</span>
-      </div>
-      <div class="sep"></div>
-      <div class="grp">
-        <span class="cap">Contrast</span>
-        <input type="range" id="exC" min="-100" max="100" step="1" value="0">
-        <span class="pt" id="exCv">0</span>
-      </div>
-      <div class="sep"></div>
-      <div class="grp">
-        <button id="exReset">Reset</button>
-        <button id="exDone" class="primary" title="Brightness and contrast are baked into the saved PNG">Done</button>
-      </div>
-    </div>
-
-    <div class="prompt" id="batchPrompt" hidden>
-      <span class="step" id="batchStep">1</span>
-      <span class="txt">
-        <span class="say" id="batchSay"></span>
-        <span class="hint" id="batchHint"></span>
-      </span>
-      <button id="batchStop">Cancel</button>
-    </div>
   </div>
 </main>
 
+<div class="dock" id="dock">
+  <div class="tools" id="prepTools" hidden>
+    <div class="grp">
+      <button class="sw" id="rotL" title="Rotate a quarter turn left">&#8630;</button>
+      <button class="sw" id="rotR" title="Rotate a quarter turn right">&#8631;</button>
+    </div>
+    <div class="sep"></div>
+    <div class="grp">
+      <span class="cap">Straighten</span>
+      <input type="range" id="angle" min="-45" max="45" step="0.1" value="0" title="Arrow keys nudge by 0.1°">
+      <span class="pt" id="angpt">0.0°</span>
+    </div>
+    <div class="sep"></div>
+    <div class="grp">
+      <button id="lineBtn" class="tgl" title="Drag along something that should be level">Level line</button>
+      <button id="fitBtn" title="Largest crop with no empty corners">Fit</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+    <div class="grp" style="margin-left:auto">
+      <span class="count" id="prepInfo"></span>
+      <button id="applyBtn" class="primary">Use this gel &rarr;</button>
+    </div>
+  </div>
+
+  <div class="tools expo" id="expoBar" hidden>
+    <div class="grp">
+      <span class="cap">Brightness</span>
+      <input type="range" id="exB" min="-100" max="100" step="1" value="0">
+      <span class="pt" id="exBv">0</span>
+    </div>
+    <div class="sep"></div>
+    <div class="grp">
+      <span class="cap">Contrast</span>
+      <input type="range" id="exC" min="-100" max="100" step="1" value="0">
+      <span class="pt" id="exCv">0</span>
+    </div>
+    <div class="sep"></div>
+    <div class="grp">
+      <button id="exReset">Reset</button>
+      <button id="exDone" class="primary" title="Brightness and contrast are baked into the saved PNG">Done</button>
+    </div>
+  </div>
+
+  <div class="tools expo" id="colBar" hidden>
+    <div class="grp">
+      <span class="cap">Colour</span>
+      <input type="color" id="colPick" value="#35d0ff" title="Pick a colour">
+      <input type="text" id="colHex" class="hex" spellcheck="false" maxlength="7" aria-label="Hex colour">
+      <button id="colApply" class="primary">Apply</button>
+    </div>
+    <div class="sep"></div>
+    <div class="grp">
+      <span class="cap">Recent</span>
+      <span class="recent" id="colRecent"></span>
+    </div>
+    <div class="grp" style="margin-left:auto"><button id="colDone">Done</button></div>
+  </div>
+
+  <div class="prompt" id="batchPrompt" hidden>
+    <span class="step" id="batchStep">1</span>
+    <span class="txt">
+      <span class="say" id="batchSay"></span>
+      <span class="hint" id="batchHint"></span>
+    </span>
+    <button id="batchStop">Cancel</button>
+  </div>
+
+  <div class="tools off" id="tools">
+    <div class="grp">
+      <span class="cap">Size</span>
+      <input type="range" id="size" min="6" max="200" step="1" value="18" title="Font size">
+      <span class="pt" id="pt">18px</span>
+      <label class="chk" title="Apply the size to every label"><input type="checkbox" id="all"> all</label>
+    </div>
+    <div class="sep"></div>
+    <div class="grp">
+      <span class="cap">Angle</span>
+      <button class="sw" id="r0" title="Horizontal">H</button>
+      <button class="sw" id="rup" title="Vertical, reading upwards">&uarr;</button>
+      <button class="sw" id="rdn" title="Vertical, reading downwards">&darr;</button>
+    </div>
+    <div class="sep"></div>
+    <div class="grp">
+      <span class="cap">Colour</span>
+      <button class="sw" id="cAuto" title="Pick from the background">A</button>
+      <button class="sw w" id="cWhite" title="White">W</button>
+      <button class="sw r" id="cRed" title="Red">R</button>
+      <button class="sw" id="cCustomWrap" title="Custom colour — opens the colour panel"></button>
+    </div>
+    <div class="sep"></div>
+    <div class="grp" id="alignGrp">
+      <span class="cap">Align</span>
+      <button class="sw ic" id="alL" title="Align left edges"><svg viewBox="0 0 16 16"><path d="M2.5 2v12"/><rect x="4.5" y="4" width="9" height="3"/><rect x="4.5" y="9" width="6" height="3"/></svg></button>
+      <button class="sw ic" id="alC" title="Centre horizontally"><svg viewBox="0 0 16 16"><path d="M8 2v12"/><rect x="3.5" y="4" width="9" height="3"/><rect x="5" y="9" width="6" height="3"/></svg></button>
+      <button class="sw ic" id="alR" title="Align right edges"><svg viewBox="0 0 16 16"><path d="M13.5 2v12"/><rect x="2.5" y="4" width="9" height="3"/><rect x="5.5" y="9" width="6" height="3"/></svg></button>
+      <button class="sw ic" id="alT" title="Align top edges"><svg viewBox="0 0 16 16"><path d="M2 2.5h12"/><rect x="4" y="4.5" width="3" height="9"/><rect x="9" y="4.5" width="3" height="6"/></svg></button>
+      <button class="sw ic" id="alM" title="Centre vertically"><svg viewBox="0 0 16 16"><path d="M2 8h12"/><rect x="4" y="3.5" width="3" height="9"/><rect x="9" y="5" width="3" height="6"/></svg></button>
+      <button class="sw ic" id="alB" title="Align bottom edges"><svg viewBox="0 0 16 16"><path d="M2 13.5h12"/><rect x="4" y="2.5" width="3" height="9"/><rect x="9" y="5.5" width="3" height="6"/></svg></button>
+    </div>
+    <div class="sep"></div>
+    <div class="grp" id="distGrp">
+      <span class="cap">Space</span>
+      <button class="sw ic" id="dsH" title="Space evenly across (equal gaps between centres)"><svg viewBox="0 0 16 16"><rect x="1" y="3" width="2.4" height="10"/><rect x="6.8" y="3" width="2.4" height="10"/><rect x="12.6" y="3" width="2.4" height="10"/><path d="M4.6 8h1.2M10.4 8h1.2"/></svg></button>
+      <button class="sw ic" id="dsV" title="Space evenly down (equal gaps between centres)"><svg viewBox="0 0 16 16"><rect x="3" y="1" width="10" height="2.4"/><rect x="3" y="6.8" width="10" height="2.4"/><rect x="3" y="12.6" width="10" height="2.4"/><path d="M8 4.6v1.2M8 10.4v1.2"/></svg></button>
+    </div>
+    <div class="sep"></div>
+    <div class="grp"><button class="sw del" id="del" title="Delete selected labels">&times;</button></div>
+    <div class="count" id="count">no labels selected</div>
+  </div>
+</div>
 <div class="veil" id="batchVeil" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="batchTitle">
     <h2 id="batchTitle">Add multiple labels</h2>
@@ -795,6 +826,7 @@ function enterPrep(fresh){
   $('lineBtn').classList.remove('on');
   wrap.classList.add('prepmode');
   $('prepLayer').hidden=false; $('prepTools').hidden=false; $('tools').hidden=true;
+  $('expoBar').hidden=true; $('colBar').hidden=true;
   ['save','clear','cropbtn','batchbtn','expo'].forEach(id=>$(id).disabled=true);
   /* before drawPrep, so the footer is already its final height when the gel
      is fitted — a longer status line steals a row from the image           */
@@ -1163,14 +1195,8 @@ function measureFit(){
   /* "Does it still scroll?" is the real question, and asking the scroller
      itself folds in the toolbar's rewrapping, the crop handles' overhang and
      sub-pixel rounding that measuring the pieces separately would miss.     */
-  /* The toolbar wraps by width, so tying it to a narrow gel costs rows and
-     those rows shrink the gel again. Give the bars their own width and the
-     loop settles with a far larger image.                                   */
-  const barW=Math.floor(Math.min(availW, 760));
   for(let i=0;i<8;i++){
-    const ww=Math.floor(w);
-    stage.style.width=ww+'px';
-    wrap.style.width=Math.max(ww, barW)+'px';
+    wrap.style.width=Math.floor(w)+'px';
     const over=mainEl.scrollHeight-mainEl.clientHeight;
     if(over<=0) break;
     w=Math.max(120, w-Math.max(1, over*vw/vh));
@@ -1185,6 +1211,7 @@ new ResizeObserver(rescale).observe(view);
 /* the window, and the footer rewrapping under a long status line, both change
    how much room the gel has — refit whenever that box actually resizes.     */
 new ResizeObserver(()=>{ fitView(); rescale(); }).observe(mainEl);
+new ResizeObserver(()=>{ fitView(); rescale(); }).observe($('dock'));
 
 /* ------------------------------------------------------------- labels */
 /* A label is anchored at (cx, y). For rot 0 that point is the top centre of
@@ -1416,7 +1443,7 @@ function syncTools(){
   $('rup').classList.toggle('on', primary.rot===-90);
   $('rdn').classList.toggle('on', primary.rot===90);
   const custom=isHex(primary.colour);
-  if(custom) $('cCustom').value=primary.colour;
+  $('cCustomWrap').style.background = custom ? primary.colour : (recent[0] || '#35d0ff');
   $('cCustomWrap').classList.toggle('on', custom);
   $('cAuto').classList.toggle('on',  primary.colour==='auto');
   $('cWhite').classList.toggle('on', primary.colour==='white');
@@ -1536,10 +1563,81 @@ function setColour(mode){
   sels.forEach(l=>{ l.colour=mode; paint(l); });
   syncTools();
 }
+
+/* ---------------------------------------------------- the colour panel
+   Picking only arms the panel; nothing on the gel changes until Apply, so
+   dragging around the picker no longer repaints the labels at every stop.
+   Applying also files the colour under Recent, which is where the same few
+   figure colours come back from.                                          */
+const RECENT_KEY='gel-labeller.recent-colours', RECENT_MAX=8;
+let recent=[];
+try{ recent=(JSON.parse(localStorage.getItem(RECENT_KEY))||[]).filter(isHex).slice(0,RECENT_MAX); }
+catch(_){ recent=[]; }
+function saveRecent(){
+  try{ localStorage.setItem(RECENT_KEY, JSON.stringify(recent)); }catch(_){}   // private mode
+}
+function rememberColour(hex){
+  hex=hex.toLowerCase();
+  recent=[hex, ...recent.filter(c=>c.toLowerCase()!==hex)].slice(0,RECENT_MAX);
+  saveRecent(); drawRecent();
+}
+function drawRecent(){
+  const box=$('colRecent');
+  box.textContent='';
+  if(!recent.length){
+    const s=document.createElement('span');
+    s.className='none'; s.textContent='none yet';
+    box.appendChild(s); return;
+  }
+  recent.forEach(c=>{
+    const b=document.createElement('button');
+    b.style.background=c; b.title=c.toUpperCase();
+    b.onclick=()=>{ armColour(c); applyColour(); };     // already accepted once
+    box.appendChild(b);
+  });
+}
+
+function armColour(hex){
+  if(!isHex(hex)) return;
+  $('colPick').value=hex;
+  $('colHex').value=hex.toUpperCase();
+}
+function applyColour(){
+  const hex=$('colPick').value;
+  if(!isHex(hex)) return;
+  rememberColour(hex);
+  if(!sels.length){ setStatus(`${hex.toUpperCase()} saved to Recent — select labels to apply it.`); return; }
+  setColour(hex);
+  setStatus(`${sels.length} label${sels.length===1?'':'s'} set to ${hex.toUpperCase()}.`);
+}
+function showCol(on){
+  $('colBar').hidden=!on;
+  if(on){
+    const start = (primary && isHex(primary.colour)) ? primary.colour
+                : recent[0] || '#35d0ff';
+    armColour(start);
+    drawRecent();
+  }
+  fitView(); rescale();
+}
+$('colPick').addEventListener('input', e=>armColour(e.target.value));
+$('colHex').addEventListener('input', e=>{
+  let v=e.target.value.trim();
+  if(v && v[0]!=='#') v='#'+v;
+  if(isHex(v)) $('colPick').value=v;
+});
+$('colHex').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ e.preventDefault(); applyColour(); }
+  if(e.key==='Escape'){ e.preventDefault(); showCol(false); }
+});
+$('colApply').onclick=applyColour;
+$('colDone').onclick =()=>showCol(false);
+$('cCustomWrap').onclick=()=>{ if(hasImage && mode==='label') showCol($('colBar').hidden); };
+drawRecent();
+
 $('cAuto').onclick =()=>setColour('auto');
 $('cWhite').onclick=()=>setColour('white');
 $('cRed').onclick  =()=>setColour('red');
-$('cCustom').addEventListener('input', e=>setColour(e.target.value));
 $('dsH').onclick=()=>distribute('h');
 $('dsV').onclick=()=>distribute('v');
 $('alL').onclick=()=>align('left');
@@ -1637,7 +1735,7 @@ function startBatch(){
   mode='batch';
   ovl.style.cursor='crosshair';
   const n=lines.filter(t=>t.trim()).length;
-  $('expoBar').hidden=true;
+  $('expoBar').hidden=true; $('colBar').hidden=true;
   $('tools').hidden=true;                      // nothing to act on mid-placement
   sayStep(1, 'Click on the gel where the FIRST label goes',
              `${n} label${n===1?'':'s'} · Esc cancels`);
@@ -1946,7 +2044,12 @@ const TOUR=[
    html:`<p>Acts on whatever is selected. <b>Size</b> has an <b>all</b> tick to resize every label at once.</p>
          <p><b>Colour A</b> reads the gel behind each label and picks white or red to suit it,
          so labels stay readable over both dark and light backgrounds. <b>W</b> and <b>R</b>
-         force white or red, and the swatch beside them opens a colour picker for anything else.</p>
+         force white or red.</p>
+         <p>The swatch beside them opens a colour panel under the gel. Pick a colour or type a
+         hex code — nothing changes until you press <b>Apply</b>, so dragging around the picker
+         doesn't keep repainting your labels. Each colour you apply is kept under
+         <b>Recent</b>, and clicking one of those applies it straight away, so the same few
+         figure colours stay one click apart across sessions.</p>
          <p><b>Align</b> needs two or more selected — it lines up their edges or centres.
          <b>Space</b> needs three: it holds the outermost two still and spreads the rest
          so the gaps are equal.</p>`},
